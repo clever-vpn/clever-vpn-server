@@ -47,7 +47,7 @@ getGithubRelease() {
     GH_ASSET="$GH_REPO/releases/assets/$id"
     # Download asset file.
     echo "Downloading asset..." >&2
-    curl $CURL_ARGS -H "$AUTH" -H 'Accept: application/octet-stream'  -o "$BOOT_PKG" "$GH_ASSET"
+    curl $CURL_ARGS -H "$AUTH" -H 'Accept: application/octet-stream'  "$GH_ASSET"
 }
 
 
