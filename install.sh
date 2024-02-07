@@ -45,6 +45,7 @@ getGithubRelease() {
     #id=$(echo "$response" | jq --arg name "$name" '.assets[] | select(.name == $name).id') # If jq is installed, this can be used instead. 
     [ "$id" ] || { echo "Error: Failed to get asset id, response: $response" | awk 'length($0)<100' >&2; exit 1; }
     GH_ASSET="$GH_REPO/releases/assets/$id"
+    # Remove file of name from this current dir
     # Download asset file.
     echo "Downloading asset..." >&2
     curl $CURL_ARGS -H "$AUTH" -H 'Accept: application/octet-stream'  "$GH_ASSET"
