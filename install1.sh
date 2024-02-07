@@ -129,51 +129,51 @@ identify_the_operating_system_and_architecture() {
     exit 1
   fi
   case "$(uname -m)" in
-    'i386' | 'i686')
-      MACHINE='32'
-      ;;
+    # 'i386' | 'i686')
+    #   MACHINE='32'
+    #   ;;
     'amd64' | 'x86_64')
       MACHINE='64'
       ;;
-    'armv5tel')
-      MACHINE='arm32-v5'
-      ;;
-    'armv6l')
-      MACHINE='arm32-v6'
-      grep Features /proc/cpuinfo | grep -qw 'vfp' || MACHINE='arm32-v5'
-      ;;
-    'armv7' | 'armv7l')
-      MACHINE='arm32-v7a'
-      grep Features /proc/cpuinfo | grep -qw 'vfp' || MACHINE='arm32-v5'
-      ;;
-    'armv8' | 'aarch64')
-      MACHINE='arm64-v8a'
-      ;;
-    'mips')
-      MACHINE='mips32'
-      ;;
-    'mipsle')
-      MACHINE='mips32le'
-      ;;
-    'mips64')
-      MACHINE='mips64'
-      lscpu | grep -q "Little Endian" && MACHINE='mips64le'
-      ;;
-    'mips64le')
-      MACHINE='mips64le'
-      ;;
-    'ppc64')
-      MACHINE='ppc64'
-      ;;
-    'ppc64le')
-      MACHINE='ppc64le'
-      ;;
-    'riscv64')
-      MACHINE='riscv64'
-      ;;
-    's390x')
-      MACHINE='s390x'
-      ;;
+    # 'armv5tel')
+    #   MACHINE='arm32-v5'
+    #   ;;
+    # 'armv6l')
+    #   MACHINE='arm32-v6'
+    #   grep Features /proc/cpuinfo | grep -qw 'vfp' || MACHINE='arm32-v5'
+    #   ;;
+    # 'armv7' | 'armv7l')
+    #   MACHINE='arm32-v7a'
+    #   grep Features /proc/cpuinfo | grep -qw 'vfp' || MACHINE='arm32-v5'
+    #   ;;
+    # 'armv8' | 'aarch64')
+    #   MACHINE='arm64-v8a'
+    #   ;;
+    # 'mips')
+    #   MACHINE='mips32'
+    #   ;;
+    # 'mipsle')
+    #   MACHINE='mips32le'
+    #   ;;
+    # 'mips64')
+    #   MACHINE='mips64'
+    #   lscpu | grep -q "Little Endian" && MACHINE='mips64le'
+    #   ;;
+    # 'mips64le')
+    #   MACHINE='mips64le'
+    #   ;;
+    # 'ppc64')
+    #   MACHINE='ppc64'
+    #   ;;
+    # 'ppc64le')
+    #   MACHINE='ppc64le'
+    #   ;;
+    # 'riscv64')
+    #   MACHINE='riscv64'
+    #   ;;
+    # 's390x')
+    #   MACHINE='s390x'
+    #   ;;
     *)
       echo "error: The architecture is not supported."
       exit 1
@@ -197,26 +197,26 @@ identify_the_operating_system_and_architecture() {
     PACKAGE_MANAGEMENT_INSTALL='apt -y --no-install-recommends install'
     PACKAGE_MANAGEMENT_REMOVE='apt purge'
     package_provide_tput='ncurses-bin'
-  elif [[ "$(type -P dnf)" ]]; then
-    PACKAGE_MANAGEMENT_INSTALL='dnf -y install'
-    PACKAGE_MANAGEMENT_REMOVE='dnf remove'
-    package_provide_tput='ncurses'
-  elif [[ "$(type -P yum)" ]]; then
-    PACKAGE_MANAGEMENT_INSTALL='yum -y install'
-    PACKAGE_MANAGEMENT_REMOVE='yum remove'
-    package_provide_tput='ncurses'
-  elif [[ "$(type -P zypper)" ]]; then
-    PACKAGE_MANAGEMENT_INSTALL='zypper install -y --no-recommends'
-    PACKAGE_MANAGEMENT_REMOVE='zypper remove'
-    package_provide_tput='ncurses-utils'
-  elif [[ "$(type -P pacman)" ]]; then
-    PACKAGE_MANAGEMENT_INSTALL='pacman -Syy --noconfirm'
-    PACKAGE_MANAGEMENT_REMOVE='pacman -Rsn'
-    package_provide_tput='ncurses'
-    elif [[ "$(type -P emerge)" ]]; then
-    PACKAGE_MANAGEMENT_INSTALL='emerge -qv'
-    PACKAGE_MANAGEMENT_REMOVE='emerge -Cv'
-    package_provide_tput='ncurses'
+#   elif [[ "$(type -P dnf)" ]]; then
+#     PACKAGE_MANAGEMENT_INSTALL='dnf -y install'
+#     PACKAGE_MANAGEMENT_REMOVE='dnf remove'
+#     package_provide_tput='ncurses'
+#   elif [[ "$(type -P yum)" ]]; then
+#     PACKAGE_MANAGEMENT_INSTALL='yum -y install'
+#     PACKAGE_MANAGEMENT_REMOVE='yum remove'
+#     package_provide_tput='ncurses'
+#   elif [[ "$(type -P zypper)" ]]; then
+#     PACKAGE_MANAGEMENT_INSTALL='zypper install -y --no-recommends'
+#     PACKAGE_MANAGEMENT_REMOVE='zypper remove'
+#     package_provide_tput='ncurses-utils'
+#   elif [[ "$(type -P pacman)" ]]; then
+#     PACKAGE_MANAGEMENT_INSTALL='pacman -Syy --noconfirm'
+#     PACKAGE_MANAGEMENT_REMOVE='pacman -Rsn'
+#     package_provide_tput='ncurses'
+#     elif [[ "$(type -P emerge)" ]]; then
+#     PACKAGE_MANAGEMENT_INSTALL='emerge -qv'
+#     PACKAGE_MANAGEMENT_REMOVE='emerge -Cv'
+#     package_provide_tput='ncurses'
   else
     echo "error: The script does not support the package manager in this operating system."
     exit 1
@@ -232,82 +232,82 @@ judgment_parameters() {
       'install')
         INSTALL='1'
         ;;
-      'install-geodata')
-        INSTALL_GEODATA='1'
-        ;;
+    #   'install-geodata')
+    #     INSTALL_GEODATA='1'
+    #     ;;
       'remove')
         REMOVE='1'
         ;;
       'help')
         HELP='1'
         ;;
-      'check')
-        CHECK='1'
-        ;;
-      '--without-geodata')
-        NO_GEODATA='1'
-        ;;
-      '--without-logfiles')
-        NO_LOGFILES='1'
-        ;;
-      '--purge')
-        PURGE='1'
-        ;;
-      '--version')
-        if [[ -z "$2" ]]; then
-          echo "error: Please specify the correct version."
-          exit 1
-        fi
-        temp_version='1'
-        SPECIFIED_VERSION="$2"
-        shift
-        ;;
-      '-f' | '--force')
-        FORCE='1'
-        ;;
-      '--beta')
-        BETA='1'
-        ;;
-      '-l' | '--local')
-        local_install='1'
-        if [[ -z "$2" ]]; then
-          echo "error: Please specify the correct local file."
-          exit 1
-        fi
-        LOCAL_FILE="$2"
-        shift
-        ;;
-      '-p' | '--proxy')
-        if [[ -z "$2" ]]; then
-          echo "error: Please specify the proxy server address."
-          exit 1
-        fi
-        PROXY="$2"
-        shift
-        ;;
-      '-u' | '--install-user')
-        if [[ -z "$2" ]]; then
-          echo "error: Please specify the install user.}"
-          exit 1
-        fi
-        INSTALL_USER="$2"
-        shift
-        ;;
-      '--reinstall')
-        REINSTALL='1'
-        ;;
-      '--no-update-service')
-        N_UP_SERVICE='1'
-        ;;
-      '--logrotate')
-        if grep -qE '\b([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\b' <<< "$2";then
-          echo "error: Wrong format of time, it should be in the format of 12:34:56, under 12:00:00 should be start with 0, e.g. 01:23:45."
-          exit 1
-        fi
-        LOGROTATE='1'
-        LOGROTATE_TIME="$2"
-        shift
-        ;;
+    #   'check')
+    #     CHECK='1'
+    #     ;;
+    #   '--without-geodata')
+    #     NO_GEODATA='1'
+    #     ;;
+    #   '--without-logfiles')
+    #     NO_LOGFILES='1'
+    #     ;;
+    #   '--purge')
+    #     PURGE='1'
+    #     ;;
+    #   '--version')
+    #     if [[ -z "$2" ]]; then
+    #       echo "error: Please specify the correct version."
+    #       exit 1
+    #     fi
+    #     temp_version='1'
+    #     SPECIFIED_VERSION="$2"
+    #     shift
+    #     ;;
+    #   '-f' | '--force')
+    #     FORCE='1'
+    #     ;;
+    #   '--beta')
+    #     BETA='1'
+    #     ;;
+    #   '-l' | '--local')
+    #     local_install='1'
+    #     if [[ -z "$2" ]]; then
+    #       echo "error: Please specify the correct local file."
+    #       exit 1
+    #     fi
+    #     LOCAL_FILE="$2"
+    #     shift
+    #     ;;
+    #   '-p' | '--proxy')
+    #     if [[ -z "$2" ]]; then
+    #       echo "error: Please specify the proxy server address."
+    #       exit 1
+    #     fi
+    #     PROXY="$2"
+    #     shift
+    #     ;;
+    #   '-u' | '--install-user')
+    #     if [[ -z "$2" ]]; then
+    #       echo "error: Please specify the install user.}"
+    #       exit 1
+    #     fi
+    #     INSTALL_USER="$2"
+    #     shift
+    #     ;;
+    #   '--reinstall')
+    #     REINSTALL='1'
+    #     ;;
+    #   '--no-update-service')
+    #     N_UP_SERVICE='1'
+    #     ;;
+    #   '--logrotate')
+    #     if grep -qE '\b([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\b' <<< "$2";then
+    #       echo "error: Wrong format of time, it should be in the format of 12:34:56, under 12:00:00 should be start with 0, e.g. 01:23:45."
+    #       exit 1
+    #     fi
+    #     LOGROTATE='1'
+    #     LOGROTATE_TIME="$2"
+    #     shift
+    #     ;;
       *)
         echo "$0: unknown option -- -"
         exit 1
@@ -315,16 +315,16 @@ judgment_parameters() {
     esac
     shift
   done
-  if ((INSTALL+INSTALL_GEODATA+HELP+CHECK+REMOVE==0)); then
-    INSTALL='1'
-  elif ((INSTALL+INSTALL_GEODATA+HELP+CHECK+REMOVE>1)); then
-    echo 'You can only choose one action.'
-    exit 1
-  fi
-  if [[ "$INSTALL" -eq '1' ]] && ((temp_version+local_install+REINSTALL+BETA>1)); then
-    echo "--version,--reinstall,--beta and --local can't be used together."
-    exit 1
-  fi
+#   if ((INSTALL+INSTALL_GEODATA+HELP+CHECK+REMOVE==0)); then
+#     INSTALL='1'
+#   elif ((INSTALL+INSTALL_GEODATA+HELP+CHECK+REMOVE>1)); then
+#     echo 'You can only choose one action.'
+#     exit 1
+#   fi
+#   if [[ "$INSTALL" -eq '1' ]] && ((temp_version+local_install+REINSTALL+BETA>1)); then
+#     echo "--version,--reinstall,--beta and --local can't be used together."
+#     exit 1
+#   fi
 }
 
 check_install_user() {
@@ -820,6 +820,7 @@ main() {
   green=$(tput setaf 2)
   aoi=$(tput setaf 6)
   reset=$(tput sgr0)
+  
 
   # Parameter information
   [[ "$HELP" -eq '1' ]] && show_help

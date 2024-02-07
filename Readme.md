@@ -7,12 +7,12 @@ Bash script for installing Clever VPN Server in operating systems that support d
 **Install & Upgrade**
 
 ```
-bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+bash -c "$(curl -L https://github.com/wireguard-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ install
 ```
 
 **Remove**
 
 ```
-bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove
+bash -c "$(curl -L https://github.com/wireguard-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ remove
 ```
 
