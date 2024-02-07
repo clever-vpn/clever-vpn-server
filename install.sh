@@ -63,6 +63,10 @@ install_software() {
     echo "error: Installation of $package_name failed, please check your network."
     exit 1
   fi
+
+  if [ -f "$package_name" ]; then
+    rm -f "$package_name"
+  fi
 }
 
 purge_software() {
