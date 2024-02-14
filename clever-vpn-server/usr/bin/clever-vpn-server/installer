@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+
+# Usage:
+# ./install.sh install [key]
+# ./install.sh activate key
+# ./install.sh remove
+
+set -e -o pipefail
+shopt -s extglob
+
+SERVER_BIN="/usr/bin/clever-vpn-server"
+SERVER_LIB="/usr/lib/clever-vpn-server"
+SERVER_ETC="/etc/clever-vpn-server"
+
+INSTALLER="/usr/bin/clever-vpn-server/installer"
+function isRoot() {
+	if [ "${EUID}" -ne 0 ]; then
+		echo "You need to run this script as root"
+		exit 1
+	fi
+}
+
+function checkVirt() {
+	if [ "$(systemd-detect-virt)" == "openvz" ]; then
+		echo "OpenVZ is not supported"
+		exit 1
+	fi
+
+	if [ "$(systemd-detect-virt)" == "lxc" ]; then
+		echo "LXC is not supported (yet)."
+		exit 1
+	fi
+}
+
+function checkOS() {
+	source /etc/os-release
+	OS="${ID}"
+	if [[ ${OS} == "debian" || ${OS} == "raspbian" ]]; then
+		if [[ ${VERSION_ID} -lt 10 ]]; then
+			echo "Your version of Debian (${VERSION_ID}) is not supported. Please use Debian 10 Buster or later"
+			exit 1
+		fi
+		OS=debian # overwrite if raspbian
+	elif [[ ${OS} == "ubuntu" ]]; then
+		RELEASE_YEAR=$(echo "${VERSION_ID}" | cut -d'.' -f1)
+		if [[ ${RELEASE_YEAR} -lt 18 ]]; then
+			echo "Your version of Ubuntu (${VERSION_ID}) is not supported. Please use Ubuntu 18.04 or later"
+			exit 1
+		fi
+	elif [[ ${OS} == "fedora" ]]; then
+		if [[ ${VERSION_ID} -lt 32 ]]; then
+			echo "Your version of Fedora (${VERSION_ID}) is not supported. Please use Fedora 32 or later"
+			exit 1
+		fi
+	elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
+		if [[ ${VERSION_ID} == 7* ]]; then
+			echo "Your version of CentOS (${VERSION_ID}) is not supported. Please use CentOS 8 or later"
+			exit 1
+		fi
+	elif [[ -e /etc/oracle-release ]]; then
+		source /etc/os-release
+		OS=oracle
+	elif [[ -e /etc/arch-release ]]; then
+		OS=arch
+	else
+		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, AlmaLinux, Oracle or Arch Linux system"
+		exit 1
+	fi
+}
+
+function initialCheck() {
+	isRoot
+	checkVirt
+	checkOS
+}
+
+
+
+# usage: $0 dir key
+install() {
+  cp $1/* -ur /
+  if [[ -n $2 ]]; then
+    activate $2
+  fi
+  chmod 644 /etc/clever-vpn-server/key
+  systemctl enable clever-vpn-server
+}
+
+uninstall() {
+  systemctl stop clever-vpn-server
+  systemctl disable clever-vpn-server
+  rm -rf $SERVER_BIN $SERVER_ETC $SERVER_LIB
+}
+
+activate() {
+     echo $1 > /etc/clever-vpn-server/key
+  chmod 644 /etc/clever-vpn-server/key 
+}
+
+help() {
+    echo "Usage:"
+    echo "installer install dir key"
+    echo "installer uninstall"
+    echo "installer activate key"
+    echo "installer help"
+}
+
+
+
+main() {
+  initialCheck
+  if [[ $# -ge 1 ]]; then
+    {
+      case $1 in
+      install) {
+        shift
+        install $@
+      } ;;
+      uninstall) {
+        shift
+        uninstall $@
+      };;
+      activate) {
+        shift
+        activate $@
+      };;
+      help) {
+        help
+      };;
+      *)
+        error "$1 command not support"
+        ;;
+      esac
+    }
+  else
+    error "no command"
+  fi
+
+
+
+}
+
+main "$@"

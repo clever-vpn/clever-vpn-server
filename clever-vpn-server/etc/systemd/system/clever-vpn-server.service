@@ -1,0 +1,14 @@
+[Unit]
+Description=Clever VPN server
+Documentation=https://www.wiregurad-vpn.com
+After=network.target nss-lookup.target
+
+[Service]
+User=root
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/root
+ExecStart=/usr/bin/clever-vpn-server/server
+
+[Install]
+WantedBy=multi-user.target
