@@ -13,6 +13,6 @@ bash -c "$(curl -L https://github.com/wireguard-vpn/clever-vpn-server-boot/raw/m
 **Remove**
 
 ```
-bash -c "$(curl -L https://github.com/wireguard-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ remove
+bash -c "$(curl -L https://github.com/wireguard-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ uninstall
 ```
 
