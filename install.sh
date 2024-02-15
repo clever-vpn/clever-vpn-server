@@ -129,7 +129,12 @@ install() {
 }
 
 uninstall() {
-  ${INSTALLER} "uninstall"
+  if [[ -e ${INSTALLER} ]]; then
+    ${INSTALLER} "uninstall"
+  else
+    echo "Clever vpn server is not exist. Please install first!"
+    return 1
+  fi
 }
 
 activate() {
@@ -138,10 +143,11 @@ activate() {
       ${INSTALLER} "activate" $1
     else
       echo "Clever vpn server is not exist. Please install first!"
+      return 1
     fi
   else
     echo "error: no key"
-    exit 1
+    return 1
   fi
 }
 
@@ -169,17 +175,17 @@ main() {
       uninstall) {
         shift
         if uninstall $@; then
-        echo "Clever VPN Server is uninstalled successly!"
+          echo "Clever VPN Server is uninstalled successly!"
         else
-        echo "Errror: Clever VPN Server uninstallation failed!"
+          echo "Errror: Clever VPN Server uninstallation failed!"
         fi
       } ;;
       activate) {
         shift
         if activate $@; then
-         echo "Clever VPN Server is activated successly!"
+          echo "Clever VPN Server is activated successly!"
         else
-        echo "Errror: Clever VPN Server activation failed! Contact us by Web chat"
+          echo "Errror: Clever VPN Server activation failed! Contact us by Web chat"
         fi
       } ;;
       help) {
