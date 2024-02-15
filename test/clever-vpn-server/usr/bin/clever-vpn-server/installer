@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-# Usage:
-# ./install.sh install [key]
-# ./install.sh activate key
-# ./install.sh remove
-
 set -e -o pipefail
 shopt -s extglob
 
@@ -74,8 +69,57 @@ function initialCheck() {
   checkOS
 }
 
+# install wireguard /iptables/kernel dev
+install_dependencies() {
+  if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
+    apt-get update
+    apt-get install -y wireguard iptables resolvconf linux-headers-$(uname -r) build-essential
+  elif [[ ${OS} == 'debian' ]]; then
+    if ! grep -rqs "^deb .* buster-backports" /etc/apt/; then
+      echo "deb http://deb.debian.org/debian buster-backports main" >/etc/apt/sources.list.d/backports.list
+      apt-get update
+    fi
+    apt update
+    apt-get install -y iptables resolvconf linux-headers-$(uname -r) build-essential
+    apt-get install -y -t buster-backports wireguard
+  elif [[ ${OS} == 'fedora' ]]; then
+    if [[ ${VERSION_ID} -lt 32 ]]; then
+      dnf install -y dnf-plugins-core
+      dnf copr enable -y jdoss/wireguard
+      dnf install -y wireguard-dkms
+    fi
+    dnf install -y wireguard-tools iptables
+    dnf groupinstall -y "Development Tools"
+    dnf install -y kernel-devel
+  elif [[ ${OS} == 'centos' ]] || [[ ${OS} == 'almalinux' ]] || [[ ${OS} == 'rocky' ]]; then
+    if [[ ${VERSION_ID} == 8* ]]; then
+      yum install -y epel-release elrepo-release
+      yum install -y kmod-wireguard
+    fi
+    yum install -y wireguard-tools iptables
+    yum groupinstall -y "Development Tools"
+    yum install -y kernel-devel
+
+  elif [[ ${OS} == 'oracle' ]]; then
+    dnf install -y oraclelinux-developer-release-el8
+    dnf config-manager --disable -y ol8_developer
+    dnf config-manager --enable -y ol8_developer_UEKR6
+    dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
+    dnf install -y wireguard-tools iptables
+    dnf groupinstall -y "Development Tools"
+    dnf install -y kernel-devel
+  elif [[ ${OS} == 'arch' ]]; then
+    pacman -S --needed --noconfirm wireguard-tools
+    pacman -S --needed --noconfirm base-devel
+    pacman -S --needed --noconfirm linux-headers
+  fi
+}
+
 # usage: $0 dir key
 install() {
+  # 1. install dependencies:
+  install_dependencies
+  # 2. copy file of server to linux
   cp $1/* -ur /
   if [[ -n $2 ]]; then
     activate $2

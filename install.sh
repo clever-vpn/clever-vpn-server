@@ -8,7 +8,8 @@
 set -e -o pipefail
 shopt -s extglob
 
-INSTALLER="/usr/bin/clever-vpn-server/installer"
+SERVER_NAME="clever-vpn-server"
+INSTALLER="/usr/bin/${SERVER_NAME}/installer"
 function isRoot() {
   if [ "${EUID}" -ne 0 ]; then
     echo "You need to run this script as root"
@@ -115,11 +116,16 @@ getGithubRelease() {
   curl $CURL_ARGS -H "$AUTH" -H 'Accept: application/octet-stream' "$GH_ASSET"
 }
 
-
 install() {
-  getGithubRelease "wireguard-vpn" "clever-vpn-server" "latest" "clever-vpn-server.tar.gz" ""
-  tar -xzvf clever-vpn-server.tar.gz
-  clever-vpn-server/usr/bin/clever-vpn-server/installer "install" "$(pwd)/clever-vpn-server"
+  getGithubRelease "wireguard-vpn" "${SERVER_NAME}" "latest" "${SERVER_NAME}.tar.gz" ""
+  tar -xzvf ${SERVER_NAME}.tar.gz
+  if ${SERVER_NAME}/usr/bin/${SERVER_NAME}/installer "install" "$(pwd)/${SERVER_NAME}" $1; then
+    echo "Clever VPN Server is installed successly! Congratulation!"
+  else
+    echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
+  fi
+
+  rm -rf ${SERVER_NAME} ${SERVER_NAME}.tar.gz
 }
 
 uninstall() {
@@ -128,7 +134,11 @@ uninstall() {
 
 activate() {
   if [[ -n $1 ]]; then
-    ${INSTALLER} "activate" $1
+    if [[ -e ${INSTALLER} ]]; then
+      ${INSTALLER} "activate" $1
+    else
+      echo "Clever vpn server is not exist. Please install first!"
+    fi
   else
     echo "error: no key"
     exit 1
@@ -136,7 +146,11 @@ activate() {
 }
 
 help() {
-  echo "help"
+  echo "Usage:"
+  echo "installer install  [key]"
+  echo "installer uninstall"
+  echo "installer activate key"
+  echo "installer help"
 }
 
 main() {
@@ -146,15 +160,27 @@ main() {
       case $1 in
       install) {
         shift
-        install $@
+        if install $@; then
+          echo "Clever VPN Server is installed successly! Congratulation!"
+        else
+          echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
+        fi
       } ;;
       uninstall) {
         shift
-        uninstall $@
+        if uninstall $@; then
+        echo "Clever VPN Server is uninstalled successly!"
+        else
+        echo "Errror: Clever VPN Server uninstallation failed!"
+        fi
       } ;;
       activate) {
         shift
-        activate $@
+        if activate $@; then
+         echo "Clever VPN Server is activated successly!"
+        else
+        echo "Errror: Clever VPN Server activation failed! Contact us by Web chat"
+        fi
       } ;;
       help) {
         help
