@@ -167,17 +167,12 @@ main() {
       case $1 in
       install) {
         shift
-        if uninstall; then
-          echo "Clever VPN Server is uninstalled successly!"
-          if install $@; then
-            echo "Clever VPN Server is installed successly! Congratulation!"
-          else
-            echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
-          fi
+        uninstall || :
+        if install $@; then
+          echo "Clever VPN Server is installed successly! Congratulation!"
         else
-          echo "Errror: Clever VPN Server uninstallation failed!"
+          echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
         fi
-
       } ;;
       uninstall) {
         shift
