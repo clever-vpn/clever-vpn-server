@@ -161,16 +161,23 @@ help() {
 
 main() {
   initialCheck
+  cd # change to root home
   if [[ $# -ge 1 ]]; then
     {
       case $1 in
       install) {
         shift
-        if install $@; then
-          echo "Clever VPN Server is installed successly! Congratulation!"
+        if uninstall; then
+          echo "Clever VPN Server is uninstalled successly!"
+          if install $@; then
+            echo "Clever VPN Server is installed successly! Congratulation!"
+          else
+            echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
+          fi
         else
-          echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
+          echo "Errror: Clever VPN Server uninstallation failed!"
         fi
+
       } ;;
       uninstall) {
         shift
