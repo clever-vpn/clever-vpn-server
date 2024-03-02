@@ -10,22 +10,23 @@ shopt -s extglob
 
 SERVER_NAME="clever-vpn-server"
 INSTALLER="/usr/bin/${SERVER_NAME}/installer"
+
 function isRoot() {
   if [ "${EUID}" -ne 0 ]; then
-    echo "You need to run this script as root"
-    exit 1
+    echo "You need to run this script as root !"
+    return 1
   fi
 }
 
 function checkVirt() {
   if [ "$(systemd-detect-virt)" == "openvz" ]; then
-    echo "OpenVZ is not supported"
-    exit 1
+    echo "OpenVZ is not supported !"
+    return 1
   fi
 
   if [ "$(systemd-detect-virt)" == "lxc" ]; then
-    echo "LXC is not supported (yet)."
-    exit 1
+    echo "LXC is not supported (yet) !"
+    return 1
   fi
 }
 
@@ -37,25 +38,25 @@ function checkOS() {
 
   if ((current_major < required_major)) || ((current_major == required_major && current_minor < required_minor)); then
     echo "Current Kernel version is $(uname -r). We need kernel version >= $required_major.$required_minor ! "
-    exit 1
+    return 1
   fi
 
   ## support systemd
   if ! pgrep systemd; then
     echo "Current Linux don't support systemd. We only support linux version with systemd!"
-    exit 1
+    return 1
   fi
    
   ## support kernel modules 
   if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-    echo "Don't include kernel modles!"
-    exit 1
+    echo "Don't include kernel modules! We need linux-kernel-header for compile kernel module!"
+    return 1
   fi
 
   ## include make enviroment
   if ! command -v "make" >/dev/null 2>&1; then
-    echo "Dont include make toolchain"
-    exit 1
+    echo "Dont include toolchain。We need toolchain for compile kernel module!"
+    return 1
   fi
 
 }
@@ -97,9 +98,11 @@ function checkOS() {
 # }
 
 function initialCheck() {
-  isRoot
-  checkVirt
-  checkOS
+  if isRoot && checkVirt && checkOS ; then 
+    return 0
+  else
+    return 1
+  fi
 }
 
 curl() {
@@ -148,15 +151,18 @@ getGithubRelease() {
 }
 
 install() {
+
   getGithubRelease "wireguard-vpn" "${SERVER_NAME}" "latest" "${SERVER_NAME}.tar.gz" ""
-  tar -xzvf ${SERVER_NAME}.tar.gz
-  if ${SERVER_NAME}/usr/bin/${SERVER_NAME}/installer "install" "$(pwd)/${SERVER_NAME}" $1; then
-    echo "Clever VPN Server is installed successly! Congratulation!"
+  tar -xzf ${SERVER_NAME}.tar.gz
+  if ${SERVER_NAME}${INSTALLER} "install" "$(pwd)/${SERVER_NAME}" $1; then
+    code=0
   else
-    echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
+    code=1
   fi
 
   rm -rf ${SERVER_NAME} ${SERVER_NAME}.tar.gz
+
+  return $code
 }
 
 uninstall() {
@@ -191,7 +197,10 @@ help() {
 }
 
 main() {
-  initialCheck
+  if ! initialCheck; then
+    echo "Errror: Clever VPN Server installation failed! Contact us by Web chat"
+    exit 1
+  fi
   cd # change to root home
   if [[ $# -ge 1 ]]; then
     {
