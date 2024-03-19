@@ -201,7 +201,8 @@ main() {
     echo "Errror: Clever VPN Server installation failed! Contact us by Web chat"
     exit 1
   fi
-  cd # change to root home
+  # cd # change to root home
+  cd /root
   if [[ $# -ge 1 ]]; then
     {
       case $1 in
