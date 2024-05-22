@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Usage:
-# ./install.sh install [key]
-# ./install.sh activate key
+# ./install.sh install [token]
+# ./install.sh activate token
 # ./install.sh remove
 
 set -e -o pipefail
@@ -183,16 +183,16 @@ activate() {
       return 1
     fi
   else
-    echo "error: no key"
+    echo "error: no token"
     return 1
   fi
 }
 
 help() {
   echo "Usage:"
-  echo "installer install  [key]"
+  echo "installer install  [token]"
   echo "installer uninstall"
-  echo "installer activate key"
+  echo "installer activate token"
   echo "installer help"
 }
 
