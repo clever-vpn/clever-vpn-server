@@ -9,7 +9,8 @@ set -e -o pipefail
 shopt -s extglob
 
 SERVER_NAME="clever-vpn-server"
-INSTALLER="/usr/bin/${SERVER_NAME}/installer"
+SERVER_TOOL="clever-vpn"
+INSTALLER="/usr/bin/${SERVER_TOOL}"
 
 function isRoot() {
   if [ "${EUID}" -ne 0 ]; then
