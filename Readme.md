@@ -7,7 +7,7 @@ Bash script for installing Clever VPN Server in operating systems that support d
 **Install & Upgrade**
 - Install Clever-VPN-Server
 ```
-bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ install
+bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh)" @ install
 ```
 - Activate <br/>
   visit https://www.clever-vpn.net to create a server. you can get a token of activate
@@ -17,6 +17,6 @@ clever-vpn activate [token]
 **Remove**
 
 ```
-bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ uninstall
+bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh)" @ uninstall
 ```
 
