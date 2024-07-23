@@ -9,7 +9,7 @@ Bash script for installing Clever VPN Server in operating systems that support d
 ```
 bash -c "$(curl -L https://github.com/wireguard-vpn/clever-vpn-server-boot/raw/main/install.sh)" @ install
 ```
-- Activate 
+- Activate <br/>
   visit https://www.clever-vpn.net to create a server. you can get a token of activate
 ```
 clever-vpn activate [token]
