@@ -153,7 +153,7 @@ getGithubRelease() {
 
 install() {
 
-  getGithubRelease "wireguard-vpn" "${SERVER_NAME}" "latest" "${SERVER_NAME}.tar.gz" ""
+  getGithubRelease "clever-vpn" "${SERVER_NAME}" "latest" "${SERVER_NAME}.tar.gz" ""
   tar -xzf ${SERVER_NAME}.tar.gz
   if ${SERVER_NAME}${INSTALLER} "install" "$(pwd)/${SERVER_NAME}" $1; then
     code=0
