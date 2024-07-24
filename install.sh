@@ -43,7 +43,7 @@ function checkOS() {
   fi
 
   ## support systemd
-  if ! pgrep systemd; then
+  if ! pgrep systemd >/dev/null 2>&1; then
     echo "Current Linux don't support systemd. We only support linux version with systemd!"
     return 1
   fi
