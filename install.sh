@@ -147,13 +147,16 @@ getGithubRelease() {
   # Remove file of name from this current dir
   rm -f "$name"
   # Download asset file.
-  echo "Downloading asset..." >&2
+  echo "Downloading asset..."
   curl $CURL_ARGS -H "$AUTH" -H 'Accept: application/octet-stream' "$GH_ASSET"
 }
 
 install() {
 
   getGithubRelease "clever-vpn" "${SERVER_NAME}" "latest" "${SERVER_NAME}.tar.gz" ""
+
+  echo "Installing..."
+
   tar -xzf ${SERVER_NAME}.tar.gz
   if ${SERVER_NAME}${INSTALLER} "install" "$(pwd)/${SERVER_NAME}" $1; then
     code=0
