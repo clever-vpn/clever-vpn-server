@@ -212,6 +212,7 @@ main() {
       case $1 in
       install) {
         shift
+        echo "Preparing ..."
         uninstall || :
         if install $@; then
           echo "Clever VPN Server is installed successly! Congratulation!"
