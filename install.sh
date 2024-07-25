@@ -55,10 +55,10 @@ function checkOS() {
   fi
 
   ## include make enviroment
-  if ! command -v "make" >/dev/null 2>&1; then
-    echo "Dont include toolchain。We need toolchain for compile kernel module!"
-    return 1
-  fi
+  # if ! command -v "make" >/dev/null 2>&1; then
+  #   echo "Dont include toolchain。We need toolchain for compile kernel module!"
+  #   return 1
+  # fi
 
 }
 
