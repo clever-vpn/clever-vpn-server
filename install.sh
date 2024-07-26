@@ -19,14 +19,14 @@ user_input() {
 
   while true; do
     # 提示用户输入
-    read -p "$prompt (yes/no) " answer
+    read -p "$prompt (Y/n) " answer
 
     # 将用户输入转换为小写以便比较
     answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
 
     # 检查用户的输入并返回相应的状态
     case "$answer" in
-    yes | y)
+    Yes | Y)
       return 0 # 返回 0 表示 'yes'
       ;;
     no | n)
@@ -273,26 +273,6 @@ main() {
           echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
         fi
       } ;;
-
-      # uninstall) {
-      #   shift
-      #   if uninstall $@; then
-      #     echo "Clever VPN Server is uninstalled successly!"
-      #   else
-      #     echo "Errror: Clever VPN Server uninstallation failed!"
-      #   fi
-      # } ;;
-      # activate) {
-      #   shift
-      #   if activate $@; then
-      #     echo "Clever VPN Server is activated successly!"
-      #   else
-      #     echo "Errror: Clever VPN Server activation failed! Contact us by Web chat"
-      #   fi
-      # } ;;
-      # help) {
-      #   help
-      # } ;;
       *)
         help
         ;;
