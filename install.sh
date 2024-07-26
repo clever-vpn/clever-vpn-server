@@ -8,9 +8,37 @@
 set -e -o pipefail
 shopt -s extglob
 
+YES=""
 SERVER_NAME="clever-vpn-server"
 SERVER_TOOL="clever-vpn"
 INSTALLER="/usr/bin/${SERVER_TOOL}"
+
+user_input() {
+  local prompt="$1" # 获取提示信息
+  local answer      # 用于存储用户的输入
+
+  while true; do
+    # 提示用户输入
+    read -p "$prompt (yes/no) " answer
+
+    # 将用户输入转换为小写以便比较
+    answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+
+    # 检查用户的输入并返回相应的状态
+    case "$answer" in
+    yes | y)
+      return 0 # 返回 0 表示 'yes'
+      ;;
+    no | n)
+      return 1 # 返回 1 表示 'no'
+      ;;
+    *)
+      echo "Invalid input. Please enter 'yes' or 'no'."
+      # 继续循环，提示用户重新输入
+      ;;
+    esac
+  done
+}
 
 function isRoot() {
   if [ "${EUID}" -ne 0 ]; then
@@ -31,6 +59,44 @@ function checkVirt() {
   fi
 }
 
+# install_pkg pkg-index : 1 toolchain; 2: linux-headers
+install_pkg() {
+  index=$1
+  source /etc/os-release
+  case ${ID} in
+  ubuntu | debian) {
+    case $index in
+    1) apt-get install $YES build-essential ;;
+    2) apt-get install $YES linux-headers-$(uname -r) ;;
+    esac
+  } ;;
+  fedora | oracle) {
+    case $index in
+    1) dnf groupinstall $YES "Development Tools" ;;
+    2) dnf install $YES kernel-devel ;;
+    esac
+  } ;;
+  centos | almalinux | rocky) {
+    case $index in
+    1) yum groupinstall $YES "Development Tools" ;;
+    2) yum install $YES kernel-devel ;;
+    esac
+
+  } ;;
+  arch) {
+    case $index in
+    1) pacman -S --needed --noconfirm base-devel ;;
+    2) pacman -S --needed --noconfirm linux-headers ;;
+    esac
+
+  } ;;
+  *) {
+    error "command not support"
+    exit 1
+  } ;;
+  esac
+}
+
 function checkOS() {
   ## kernel >= 5.6
   required_major=5
@@ -47,18 +113,31 @@ function checkOS() {
     echo "Current Linux don't support systemd. We only support linux version with systemd!"
     return 1
   fi
-   
-  ## support kernel modules 
-  if [[ ! -d "/lib/modules/$(uname -r)" ]]; then
-    echo "Don't include kernel modules! We need linux-kernel-header for compile kernel module!"
-    return 1
+
+  # include make enviroment
+  if ! command -v "make" >/dev/null 2>&1; then
+    echo "Dont include toolchain。We need toolchain for compile kernel module!"
+    if user_input "Do you want to install toolchain"; then
+      install_pkg 1
+    else
+      return 1
+    fi
   fi
 
-  ## include make enviroment
-  # if ! command -v "make" >/dev/null 2>&1; then
-  #   echo "Dont include toolchain。We need toolchain for compile kernel module!"
-  #   return 1
-  # fi
+  ## support kernel modules
+  if [[ ! -e "/lib/modules/$(uname -r)/build" ]]; then
+    echo "Don't include kernel-devel! We need linux-kernel for compile kernel module!"
+    if user_input "Do you want to install kernel-devel"; then
+      install_pkg 2
+    else
+      return 1
+    fi
+  fi
+
+  if [[ ! -e "/lib/modules/$(uname -r)/build" ]]; then
+    echo "Don't find kernel-devel of current kernel version! Maybe you need to update your kernel for it!"
+    return 1
+  fi
 
 }
 
@@ -99,7 +178,7 @@ function checkOS() {
 # }
 
 function initialCheck() {
-  if isRoot && checkVirt && checkOS ; then 
+  if isRoot && checkVirt && checkOS; then
     return 0
   else
     return 1
@@ -195,24 +274,29 @@ activate() {
 help() {
   echo "Usage:"
   echo "installer install  [token]"
-  echo "installer uninstall"
-  echo "installer activate token"
+  echo "installer install_y  [token]"
   echo "installer help"
 }
 
 main() {
-  if ! initialCheck; then
-    echo "Errror: Clever VPN Server installation failed! Contact us by Web chat"
-    exit 1
-  fi
+
   # cd # change to root home
   cd /root
   if [[ $# -ge 1 ]]; then
     {
       case $1 in
+      install_y) {
+        YES="-y"
+      } ;&
       install) {
         shift
-        echo "Preparing ..."
+        echo "Installing ..."
+
+        if ! initialCheck; then
+          echo "Errror: Clever VPN Server installation failed! Contact us by Web chat"
+          exit 1
+        fi
+
         uninstall || :
         if install $@; then
           echo "Clever VPN Server is installed successly! Congratulation!"
@@ -220,32 +304,33 @@ main() {
           echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
         fi
       } ;;
-      uninstall) {
-        shift
-        if uninstall $@; then
-          echo "Clever VPN Server is uninstalled successly!"
-        else
-          echo "Errror: Clever VPN Server uninstallation failed!"
-        fi
-      } ;;
-      activate) {
-        shift
-        if activate $@; then
-          echo "Clever VPN Server is activated successly!"
-        else
-          echo "Errror: Clever VPN Server activation failed! Contact us by Web chat"
-        fi
-      } ;;
-      help) {
-        help
-      } ;;
+
+      # uninstall) {
+      #   shift
+      #   if uninstall $@; then
+      #     echo "Clever VPN Server is uninstalled successly!"
+      #   else
+      #     echo "Errror: Clever VPN Server uninstallation failed!"
+      #   fi
+      # } ;;
+      # activate) {
+      #   shift
+      #   if activate $@; then
+      #     echo "Clever VPN Server is activated successly!"
+      #   else
+      #     echo "Errror: Clever VPN Server activation failed! Contact us by Web chat"
+      #   fi
+      # } ;;
+      # help) {
+      #   help
+      # } ;;
       *)
-        error "$1 command not support"
+        help
         ;;
       esac
     }
   else
-    error "no command"
+    help
   fi
 
 }
