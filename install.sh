@@ -135,7 +135,7 @@ function checkOS() {
   fi
 
   if [[ ! -e "/lib/modules/$(uname -r)/build" ]]; then
-    echo "Don't find kernel-devel of current kernel version! Maybe you need to update your kernel for it!"
+    echo "Don't find kernel-devel of current kernel version $(uname -r)! Maybe you need to update your kernel for it!"
     return 1
   fi
 
