@@ -78,7 +78,8 @@ install_pkg() {
   } ;;
   centos | almalinux | rocky) {
     case $index in
-    1) yum groupinstall $YES "Development Tools" ;;
+    # 1) yum groupinstall $YES "Development Tools" ;;
+    1) yum install $YES make gcc ;;
     2) yum install $YES kernel-devel-$(uname -r) ;;
     esac
 
