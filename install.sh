@@ -19,21 +19,21 @@ user_input() {
 
   while true; do
     # 提示用户输入
-    read -p "$prompt (Y/n) " answer
+    read -p "$prompt [y/N] " answer
 
     # 将用户输入转换为小写以便比较
     # answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
 
     # 检查用户的输入并返回相应的状态
     case "$answer" in
-    Yes | Y)
+    yes | y)
       return 0 # 返回 0 表示 'yes'
       ;;
-    no | n)
+    No | N)
       return 1 # 返回 1 表示 'no'
       ;;
     *)
-      echo "Invalid input. Please enter 'Y' or 'n'."
+      echo "Invalid input. Please enter 'y' or 'N'."
       # 继续循环，提示用户重新输入
       ;;
     esac
