@@ -66,13 +66,15 @@ install_pkg() {
   case ${ID} in
   ubuntu | debian) {
     case $index in
-    1) apt-get install $YES build-essential ;;
+    # 1) apt-get install $YES build-essential ;;
+    1) apt-get install $YES make gcc ;;
     2) apt-get install $YES linux-headers-$(uname -r) ;;
     esac
   } ;;
   fedora | oracle) {
     case $index in
-    1) dnf groupinstall $YES "Development Tools" ;;
+    # 1) dnf groupinstall $YES "Development Tools" ;;
+    1) dnf install $YES make gcc ;;
     2) dnf install $YES kernel-devel-$(uname -r) ;;
     esac
   } ;;
@@ -86,7 +88,8 @@ install_pkg() {
   } ;;
   arch) {
     case $index in
-    1) pacman -S --needed --noconfirm base-devel ;;
+    # 1) pacman -S --needed --noconfirm base-devel ;;
+    1) pacman -S --needed --noconfirm make gcc ;;
     2) pacman -S --needed --noconfirm linux-headers-$(uname -r) ;;
     esac
 
