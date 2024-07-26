@@ -17,6 +17,10 @@ user_input() {
   local prompt="$1" # 获取提示信息
   local answer      # 用于存储用户的输入
 
+  if if [[ "$YES" == "-y" ]]; then
+    return 0
+  fi
+
   while true; do
     # 提示用户输入
     read -p "$prompt [y/N] " answer
