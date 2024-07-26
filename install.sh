@@ -73,20 +73,20 @@ install_pkg() {
   fedora | oracle) {
     case $index in
     1) dnf groupinstall $YES "Development Tools" ;;
-    2) dnf install $YES kernel-devel ;;
+    2) dnf install $YES kernel-devel-$(uname -r) ;;
     esac
   } ;;
   centos | almalinux | rocky) {
     case $index in
     1) yum groupinstall $YES "Development Tools" ;;
-    2) yum install $YES kernel-devel ;;
+    2) yum install $YES kernel-devel-$(uname -r) ;;
     esac
 
   } ;;
   arch) {
     case $index in
     1) pacman -S --needed --noconfirm base-devel ;;
-    2) pacman -S --needed --noconfirm linux-headers ;;
+    2) pacman -S --needed --noconfirm linux-headers-$(uname -r) ;;
     esac
 
   } ;;
