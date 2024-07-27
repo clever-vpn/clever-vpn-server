@@ -214,6 +214,11 @@ function checkOS() {
     return 1
   fi
 
+  ## support virt
+  if ! checkVirt ; then
+    retrun 1
+  fi
+
   # include tar enviroment
   if ! command -v "tar" >/dev/null 2>&1; then
     echo "Dont include tar  tools!"
