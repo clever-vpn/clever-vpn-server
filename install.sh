@@ -44,6 +44,23 @@ user_input() {
   done
 }
 
+get_token() {
+  # 定义文件路径
+token_path="/etc/clever-vpn-server/token"
+
+# 检查文件是否存在
+if [ -f "$token_path" ]; then
+  # 如果文件存在，读取文件内容
+  token=$(cat "$token_path")
+else
+  # 如果文件不存在，将内容设置为空
+  token=""
+fi
+
+# 输出文件内容（或空内容）
+echo "$token"
+}
+
 function isRoot() {
   if [ "${EUID}" -ne 0 ]; then
     echo "You need to run this script as root !"
@@ -270,8 +287,11 @@ main() {
           exit 1
         fi
 
+        token=${1:-$(get_token)}
+
         uninstall || :
-        if install $@; then
+        # if install $@; then
+        if install $token; then
           echo "Clever VPN Server is installed successly! Congratulation!"
         else
           echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
