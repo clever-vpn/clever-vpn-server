@@ -47,15 +47,13 @@ user_input() {
 
 get_token() {
   # 定义文件路径
-  token_path="/etc/clever-vpn-server/token"
+  local token_path="/etc/clever-vpn-server/token"
+  local token
 
   # 检查文件是否存在
   if [ -f "$token_path" ]; then
     # 如果文件存在，读取文件内容
     token=$(cat "$token_path")
-  else
-    # 如果文件不存在，将内容设置为空
-    token=""
   fi
 
   # 输出文件内容（或空内容）
@@ -82,23 +80,15 @@ function checkVirt() {
 }
 
 get_pkg_cmd() {
-  if command -v "apt-get" >/dev/null 2>&1; then
-    echo "apt-get"
-    return
-  fi
-  if command -v "dnf" >/dev/null 2>&1; then
-    echo "dnf"
-    return
-  fi
-  if command -v "yum" >/dev/null 2>&1; then
-    echo "yum"
-    return
-  fi
-  if command -v "pacman" >/dev/null 2>&1; then
-    echo "pacman"
-    return
-  fi
-  echo ""
+    local cmds="apt-get dnf dnf pacman"
+    local cmd=""
+    for cmd in $cmds; do
+        if command -v $cmd >/dev/null 2>&1; then
+            break
+        fi
+    done
+
+    echo $cmd
 }
 
 #pkg_cmd cmd index
@@ -182,7 +172,7 @@ install_pkg() {
     cmd="pacman"
     ;;
   *)
-    local cmd=$(get_pkg_cmd)
+    cmd=$(get_pkg_cmd)
     ;;
   esac
 
@@ -193,72 +183,6 @@ install_pkg() {
     exit 1
   fi
 }
-# install_pkg() {
-#   index=$1
-#   source /etc/os-release
-#   case ${ID} in
-#   ubuntu | debian) {
-#     case $index in
-#     0)
-#       apt-get update
-#       apt-get install $YES tar
-#       ;;
-#     # 1) apt-get install $YES build-essential ;;
-#     1)
-#       apt-get update
-#       apt-get install $YES make gcc
-#       ;;
-#     2)
-#       apt-get install $YES linux-headers-$(uname -r)
-#       ;;
-#     esac
-#   } ;;
-#   fedora | oracle) {
-#     case $index in
-#     0)
-#       dnf install $YES tar
-#       ;;
-#     # 1) dnf groupinstall $YES "Development Tools" ;;
-#     1)
-#       dnf install $YES make gcc
-#       ;;
-#     2)
-#       dnf install $YES kernel-devel-$(uname -r)
-#       ;;
-#     esac
-#   } ;;
-#   centos | almalinux | rocky) {
-#     case $index in
-#     0)
-#       yum install $YES tar
-#       ;;
-#     # 1) yum groupinstall $YES "Development Tools" ;;
-#     1) yum install $YES make gcc ;;
-#     2) yum install $YES kernel-devel-$(uname -r) ;;
-#     esac
-
-#   } ;;
-#   arch) {
-#     case $index in
-#     0)
-#       pacman -Sy
-#       pacman -S --needed $NO_CONFIRM tar
-#       ;;
-#     # 1) pacman -S --needed --noconfirm base-devel ;;
-#     1)
-#       pacman -Sy
-#       pacman -S --needed $NO_CONFIRM make gcc
-#       ;;
-#     2) pacman -S --needed $NO_CONFIRM linux-headers ;;
-#     esac
-
-#   } ;;
-#   *) {
-#     error "command not support"
-#     exit 1
-#   } ;;
-#   esac
-# }
 
 function checkOS() {
   ## kernel >= 5.6
