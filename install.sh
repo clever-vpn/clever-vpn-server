@@ -257,7 +257,7 @@ function checkOS() {
 }
 
 function initialCheck() {
-  if isRoot && checkVirt && checkOS; then
+  if isRoot && checkOS; then
     return 0
   else
     return 1
