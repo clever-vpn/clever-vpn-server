@@ -101,7 +101,7 @@ get_pkg_cmd() {
   echo ""
 }
 
-// pkg_cmd cmd index
+#pkg_cmd cmd index
 pkg_cmd() {
   local cmd=$1
   local index=$2
