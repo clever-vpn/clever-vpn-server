@@ -82,13 +82,14 @@ function checkVirt() {
 get_pkg_cmd() {
     local cmds="apt-get dnf dnf pacman"
     local cmd=""
-    for cmd in $cmds; do
-        if command -v $cmd >/dev/null 2>&1; then
+    for cmd1 in $cmds; do
+        if command -v $cmd1 >/dev/null 2>&1; then
+            cmd=$cmd1
             break
         fi
     done
 
-    echo $cmd
+    echo $cmd1
 }
 
 #pkg_cmd cmd index
