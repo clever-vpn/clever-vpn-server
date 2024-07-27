@@ -82,7 +82,7 @@ function checkVirt() {
 }
 
 get_pkg_cmd() {
-  if command -v "api-get" >/dev/null 2>&1; then
+  if command -v "apt-get" >/dev/null 2>&1; then
     echo "apt-get"
     return
   fi
@@ -94,7 +94,7 @@ get_pkg_cmd() {
     echo "yum"
     return
   fi
-  if command -v "api-get" >/dev/null 2>&1; then
+  if command -v "pacman" >/dev/null 2>&1; then
     echo "pacman"
     return
   fi
@@ -189,7 +189,7 @@ install_pkg() {
   if [[ -n $cmd ]]; then
     pkg_cmd $cmd $index
   else
-    error "we can not find package management tools."
+    echo "error: we can not find package management tools."
     exit 1
   fi
 }
