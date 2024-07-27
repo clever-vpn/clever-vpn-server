@@ -89,7 +89,7 @@ get_pkg_cmd() {
         fi
     done
 
-    echo $cmd1
+    echo $cmd
 }
 
 #pkg_cmd cmd index
