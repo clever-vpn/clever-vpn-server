@@ -10,6 +10,7 @@ shopt -s extglob
 
 YES=""
 NO_CONFIRM=""
+NON_INTERACTIVE=""
 SERVER_NAME="clever-vpn-server"
 SERVER_TOOL="clever-vpn"
 INSTALLER="/usr/bin/${SERVER_TOOL}"
@@ -80,16 +81,16 @@ function checkVirt() {
 }
 
 get_pkg_cmd() {
-    local cmds="apt-get dnf dnf pacman"
-    local cmd=""
-    for cmd1 in $cmds; do
-        if command -v $cmd1 >/dev/null 2>&1; then
-            cmd=$cmd1
-            break
-        fi
-    done
+  local cmds="apt-get dnf dnf pacman zypper"
+  local cmd=""
+  for cmd1 in $cmds; do
+    if command -v $cmd1 >/dev/null 2>&1; then
+      cmd=$cmd1
+      break
+    fi
+  done
 
-    echo $cmd
+  echo $cmd
 }
 
 #pkg_cmd cmd index
@@ -113,6 +114,10 @@ pkg_cmd() {
       $cmd -Sy
       $cmd -S --needed $NO_CONFIRM tar
       ;;
+    zypper) 
+      $cmd refresh $NON_INTERACTIVE 
+      $cmd install $NON_INTERACTIVE tar
+    ;;
     esac
 
   } ;;
@@ -132,6 +137,10 @@ pkg_cmd() {
       $cmd -Sy
       $cmd -S --needed $NO_CONFIRM make gcc
       ;;
+    zypper) 
+      $cmd refresh $NON_INTERACTIVE 
+      $cmd install $NON_INTERACTIVE make gcc
+    ;;
     esac
 
   } ;;
@@ -148,6 +157,9 @@ pkg_cmd() {
       ;;
     pacman)
       $cmd -S --needed $NO_CONFIRM linux-headers
+      ;;
+    zypper) 
+      $cmd install $NON_INTERACTIVE kernel-devel
       ;;
     esac
   } ;;
@@ -351,6 +363,7 @@ main() {
       install_y) {
         YES="-y"
         NO_CONFIRM="--noconfirm"
+        NON_INTERACTIVE="-n"
       } ;&
       install) {
         shift
