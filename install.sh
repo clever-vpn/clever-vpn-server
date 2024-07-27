@@ -273,6 +273,7 @@ help() {
   echo "Usage:"
   echo "installer install  [token]"
   echo "installer install_y  [token]"
+  echo "installer uninstall"
   echo "installer help"
 }
 
