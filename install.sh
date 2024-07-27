@@ -89,6 +89,7 @@ install_pkg() {
   ubuntu | debian) {
     case $index in
     0)
+      apt-get update
       apt-get install $YES tar
       ;;
     # 1) apt-get install $YES build-essential ;;
@@ -129,11 +130,15 @@ install_pkg() {
   arch) {
     case $index in
     0)
+      pacman -Sy
       pacman -S --needed $NO_CONFIRM tar
       ;;
     # 1) pacman -S --needed --noconfirm base-devel ;;
-    1) pacman -S --needed $NO_CONFIRM make gcc ;;
-    2) pacman -S --needed $NO_CONFIRM linux-headers-$(uname -r) ;;
+    1)
+      pacman -Sy
+      pacman -S --needed $NO_CONFIRM make gcc
+      ;;
+    2) pacman -S --needed $NO_CONFIRM linux-headers ;;
     esac
 
   } ;;
