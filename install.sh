@@ -9,6 +9,7 @@ set -e -o pipefail
 shopt -s extglob
 
 YES=""
+NO_CONFIRM=""
 SERVER_NAME="clever-vpn-server"
 SERVER_TOOL="clever-vpn"
 INSTALLER="/usr/bin/${SERVER_TOOL}"
@@ -80,13 +81,16 @@ function checkVirt() {
   fi
 }
 
-# install_pkg pkg-index : 1 toolchain; 2: linux-headers
+# install_pkg pkg-index : 0: basic utils (tar);  1 toolchain; 2: linux-headers
 install_pkg() {
   index=$1
   source /etc/os-release
   case ${ID} in
   ubuntu | debian) {
     case $index in
+    0)
+      apt-get install $YES tar
+      ;;
     # 1) apt-get install $YES build-essential ;;
     1)
       apt-get update
@@ -99,6 +103,9 @@ install_pkg() {
   } ;;
   fedora | oracle) {
     case $index in
+    0)
+      dnf install $YES tar
+      ;;
     # 1) dnf groupinstall $YES "Development Tools" ;;
     1)
       dnf install $YES make gcc
@@ -110,6 +117,9 @@ install_pkg() {
   } ;;
   centos | almalinux | rocky) {
     case $index in
+    0)
+      yum install $YES tar
+      ;;
     # 1) yum groupinstall $YES "Development Tools" ;;
     1) yum install $YES make gcc ;;
     2) yum install $YES kernel-devel-$(uname -r) ;;
@@ -118,9 +128,12 @@ install_pkg() {
   } ;;
   arch) {
     case $index in
+    0)
+      pacman -S --needed $NO_CONFIRM tar
+      ;;
     # 1) pacman -S --needed --noconfirm base-devel ;;
-    1) pacman -S --needed --noconfirm make gcc ;;
-    2) pacman -S --needed --noconfirm linux-headers-$(uname -r) ;;
+    1) pacman -S --needed $NO_CONFIRM make gcc ;;
+    2) pacman -S --needed $NO_CONFIRM linux-headers-$(uname -r) ;;
     esac
 
   } ;;
@@ -146,6 +159,16 @@ function checkOS() {
   if ! pgrep systemd >/dev/null 2>&1; then
     echo "Current Linux don't support systemd. We only support linux version with systemd!"
     return 1
+  fi
+
+  # include tar enviroment
+  if ! command -v "tar" >/dev/null 2>&1; then
+    echo "Dont include tar  tools!"
+    if user_input "Do you want to install  tar  tool"; then
+      install_pkg 0
+    else
+      return 1
+    fi
   fi
 
   # include make enviroment
@@ -286,6 +309,7 @@ main() {
       case $1 in
       install_y) {
         YES="-y"
+        NO_CONFIRM="--noconfirm"
       } ;&
       install) {
         shift
