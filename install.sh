@@ -81,73 +81,184 @@ function checkVirt() {
   fi
 }
 
-# install_pkg pkg-index : 0: basic utils (tar);  1 toolchain; 2: linux-headers
-install_pkg() {
-  index=$1
-  source /etc/os-release
-  case ${ID} in
-  ubuntu | debian) {
-    case $index in
-    0)
+get_pkg_cmd() {
+  local cmd=""
+  if command -v "api-get" >/dev/null 2>&1; then
+    echo "apt-get"
+    return
+  fi
+  if command -v "dnf" >/dev/null 2>&1; then
+    echo "dnf"
+    return
+  fi
+  if command -v "yum" >/dev/null 2>&1; then
+    echo "yum"
+    return
+  fi
+  if command -v "api-get" >/dev/null 2>&1; then
+    echo "pacman"
+    return
+  fi
+
+}
+
+
+// pkg_cmd cmd index
+pkg_cmd() {
+  local cmd=$1
+  local index=$2
+  case $(index) in
+  0) {
+    case $(cmd) in
+    apt-get)
       apt-get update
       apt-get install $YES tar
       ;;
-    # 1) apt-get install $YES build-essential ;;
-    1)
-      apt-get update
-      apt-get install $YES make gcc
-      ;;
-    2)
-      apt-get install $YES linux-headers-$(uname -r)
-      ;;
-    esac
-  } ;;
-  fedora | oracle) {
-    case $index in
-    0)
+    dnf)
       dnf install $YES tar
       ;;
-    # 1) dnf groupinstall $YES "Development Tools" ;;
-    1)
-      dnf install $YES make gcc
-      ;;
-    2)
-      dnf install $YES kernel-devel-$(uname -r)
-      ;;
-    esac
-  } ;;
-  centos | almalinux | rocky) {
-    case $index in
-    0)
+    yum)
       yum install $YES tar
       ;;
-    # 1) yum groupinstall $YES "Development Tools" ;;
-    1) yum install $YES make gcc ;;
-    2) yum install $YES kernel-devel-$(uname -r) ;;
-    esac
-
-  } ;;
-  arch) {
-    case $index in
-    0)
+    pacman)
       pacman -Sy
       pacman -S --needed $NO_CONFIRM tar
       ;;
-    # 1) pacman -S --needed --noconfirm base-devel ;;
-    1)
-      pacman -Sy
-      pacman -S --needed $NO_CONFIRM make gcc
-      ;;
-    2) pacman -S --needed $NO_CONFIRM linux-headers ;;
     esac
 
   } ;;
-  *) {
-    error "command not support"
-    exit 1
+  1) {
+    case $(cmd) in
+    apt-get)
+      apt-get update
+      apt-get install $YES make gcc
+      ;;
+    dnf)
+      dnf install $YES make gcc
+      ;;
+    yum)
+      yum install $YES make gcc
+      ;;
+    pacman)
+      pacman -Sy
+      pacman -S --needed $NO_CONFIRM make gcc
+      ;;
+    esac
+
+  } ;;
+  2) {
+    case $(cmd) in
+    apt-get)
+      apt-get install $YES linux-headers-$(uname -r)
+      ;;
+    dnf)
+      dnf install $YES kernel-devel-$(uname -r)
+      ;;
+    yum)
+      yum install $YES kernel-devel-$(uname -r)
+      ;;
+    pacman)
+      pacman -S --needed $NO_CONFIRM linux-headers
+      ;;
+    esac
   } ;;
   esac
 }
+
+# install_pkg pkg-index : 0: basic utils (tar);  1 toolchain; 2: linux-headers
+install_pkg() {
+  local index=$1
+  source /etc/os-release
+  case ${ID} in
+  ubuntu | debian)
+    pkg_cmd "apt-get" $index
+    ;;
+  fedora | oracle)
+    pkg_cmd "dnf" $index
+    ;;
+  centos | almalinux | rocky)
+    pkg_cmd "yum" $index
+    ;;
+  arch)
+    pkg_cmd "pacman" $index
+    ;;
+  *) {
+    local cmd=$(get_pkg_cmd)
+    if [[ -n $cmd ]]; then 
+      pkg_cmd $cmd $index
+    else
+    error "we can not find package management tools."
+    exit 1
+    fi
+  } ;;
+  esac
+}
+# install_pkg() {
+#   index=$1
+#   source /etc/os-release
+#   case ${ID} in
+#   ubuntu | debian) {
+#     case $index in
+#     0)
+#       apt-get update
+#       apt-get install $YES tar
+#       ;;
+#     # 1) apt-get install $YES build-essential ;;
+#     1)
+#       apt-get update
+#       apt-get install $YES make gcc
+#       ;;
+#     2)
+#       apt-get install $YES linux-headers-$(uname -r)
+#       ;;
+#     esac
+#   } ;;
+#   fedora | oracle) {
+#     case $index in
+#     0)
+#       dnf install $YES tar
+#       ;;
+#     # 1) dnf groupinstall $YES "Development Tools" ;;
+#     1)
+#       dnf install $YES make gcc
+#       ;;
+#     2)
+#       dnf install $YES kernel-devel-$(uname -r)
+#       ;;
+#     esac
+#   } ;;
+#   centos | almalinux | rocky) {
+#     case $index in
+#     0)
+#       yum install $YES tar
+#       ;;
+#     # 1) yum groupinstall $YES "Development Tools" ;;
+#     1) yum install $YES make gcc ;;
+#     2) yum install $YES kernel-devel-$(uname -r) ;;
+#     esac
+
+#   } ;;
+#   arch) {
+#     case $index in
+#     0)
+#       pacman -Sy
+#       pacman -S --needed $NO_CONFIRM tar
+#       ;;
+#     # 1) pacman -S --needed --noconfirm base-devel ;;
+#     1)
+#       pacman -Sy
+#       pacman -S --needed $NO_CONFIRM make gcc
+#       ;;
+#     2) pacman -S --needed $NO_CONFIRM linux-headers ;;
+#     esac
+
+#   } ;;
+#   *) {
+#     error "command not support"
+#     exit 1
+#   } ;;
+#   esac
+# }
 
 function checkOS() {
   ## kernel >= 5.6
