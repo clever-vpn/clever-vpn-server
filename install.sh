@@ -46,19 +46,19 @@ user_input() {
 
 get_token() {
   # 定义文件路径
-token_path="/etc/clever-vpn-server/token"
+  token_path="/etc/clever-vpn-server/token"
 
-# 检查文件是否存在
-if [ -f "$token_path" ]; then
-  # 如果文件存在，读取文件内容
-  token=$(cat "$token_path")
-else
-  # 如果文件不存在，将内容设置为空
-  token=""
-fi
+  # 检查文件是否存在
+  if [ -f "$token_path" ]; then
+    # 如果文件存在，读取文件内容
+    token=$(cat "$token_path")
+  else
+    # 如果文件不存在，将内容设置为空
+    token=""
+  fi
 
-# 输出文件内容（或空内容）
-echo "$token"
+  # 输出文件内容（或空内容）
+  echo "$token"
 }
 
 function isRoot() {
@@ -88,15 +88,24 @@ install_pkg() {
   ubuntu | debian) {
     case $index in
     # 1) apt-get install $YES build-essential ;;
-    1) apt-get install $YES make gcc ;;
-    2) apt-get install $YES linux-headers-$(uname -r) ;;
+    1)
+      apt-get update
+      apt-get install $YES make gcc
+      ;;
+    2)
+      apt-get install $YES linux-headers-$(uname -r)
+      ;;
     esac
   } ;;
   fedora | oracle) {
     case $index in
     # 1) dnf groupinstall $YES "Development Tools" ;;
-    1) dnf install $YES make gcc ;;
-    2) dnf install $YES kernel-devel-$(uname -r) ;;
+    1)
+      dnf install $YES make gcc
+      ;;
+    2)
+      dnf install $YES kernel-devel-$(uname -r)
+      ;;
     esac
   } ;;
   centos | almalinux | rocky) {
@@ -165,7 +174,6 @@ function checkOS() {
   fi
 
 }
-
 
 function initialCheck() {
   if isRoot && checkVirt && checkOS; then
