@@ -82,7 +82,6 @@ function checkVirt() {
 }
 
 get_pkg_cmd() {
-  local cmd=""
   if command -v "api-get" >/dev/null 2>&1; then
     echo "apt-get"
     return
@@ -99,66 +98,65 @@ get_pkg_cmd() {
     echo "pacman"
     return
   fi
-
+  echo ""
 }
-
 
 // pkg_cmd cmd index
 pkg_cmd() {
   local cmd=$1
   local index=$2
-  case $(index) in
+  case $index in
   0) {
-    case $(cmd) in
+    case $cmd in
     apt-get)
-      apt-get update
-      apt-get install $YES tar
+      $cmd update
+      $cmd install $YES tar
       ;;
     dnf)
-      dnf install $YES tar
+      $cmd install $YES tar
       ;;
     yum)
-      yum install $YES tar
+      $cmd install $YES tar
       ;;
     pacman)
-      pacman -Sy
-      pacman -S --needed $NO_CONFIRM tar
+      $cmd -Sy
+      $cmd -S --needed $NO_CONFIRM tar
       ;;
     esac
 
   } ;;
   1) {
-    case $(cmd) in
+    case $cmd in
     apt-get)
-      apt-get update
-      apt-get install $YES make gcc
+      $cmd update
+      $cmd install $YES make gcc
       ;;
     dnf)
-      dnf install $YES make gcc
+      $cmd install $YES make gcc
       ;;
     yum)
-      yum install $YES make gcc
+      $cmd install $YES make gcc
       ;;
     pacman)
-      pacman -Sy
-      pacman -S --needed $NO_CONFIRM make gcc
+      $cmd -Sy
+      $cmd -S --needed $NO_CONFIRM make gcc
       ;;
     esac
 
   } ;;
   2) {
-    case $(cmd) in
+    case $cmd in
     apt-get)
-      apt-get install $YES linux-headers-$(uname -r)
+      $cmd install $YES linux-headers-$(uname -r)
       ;;
     dnf)
-      dnf install $YES kernel-devel-$(uname -r)
+      $cmd install $YES kernel-devel-$(uname -r)
       ;;
     yum)
-      yum install $YES kernel-devel-$(uname -r)
+      $cmd install $YES kernel-devel-$(uname -r)
       ;;
     pacman)
-      pacman -S --needed $NO_CONFIRM linux-headers
+      $cmd -S --needed $NO_CONFIRM linux-headers
       ;;
     esac
   } ;;
@@ -168,30 +166,32 @@ pkg_cmd() {
 # install_pkg pkg-index : 0: basic utils (tar);  1 toolchain; 2: linux-headers
 install_pkg() {
   local index=$1
+  local cmd=""
   source /etc/os-release
   case ${ID} in
   ubuntu | debian)
-    pkg_cmd "apt-get" $index
+    cmd="apt-get"
     ;;
   fedora | oracle)
-    pkg_cmd "dnf" $index
+    cmd="dnf"
     ;;
   centos | almalinux | rocky)
-    pkg_cmd "yum" $index
+    cmd="yum"
     ;;
   arch)
-    pkg_cmd "pacman" $index
+    cmd="pacman"
     ;;
-  *) {
+  *)
     local cmd=$(get_pkg_cmd)
-    if [[ -n $cmd ]]; then 
-      pkg_cmd $cmd $index
-    else
+    ;;
+  esac
+
+  if [[ -n $cmd ]]; then
+    pkg_cmd $cmd $index
+  else
     error "we can not find package management tools."
     exit 1
-    fi
-  } ;;
-  esac
+  fi
 }
 # install_pkg() {
 #   index=$1
