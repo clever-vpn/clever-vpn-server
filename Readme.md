@@ -4,6 +4,10 @@ It is VPN server software that implements the Clever VPN protocol in the Linux k
 
 Please visist https://www.clever-vpn.net for more information.
 
+## Why Clever VPN?
+
+[![](/images/why-clever-vpn.png)](https://www.clever-vpn.net)
+
 ## Basic Usage
 
 **Install & Upgrade**
