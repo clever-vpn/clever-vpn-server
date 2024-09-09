@@ -55,6 +55,9 @@ clever-vpn uninstall
 - Gentoo
 - Slackware
 
+## One-click App of Cloud Provider Install
+- Vultr: [https://www.vultr.com/marketplace/apps/clever-vpn](https://www.vultr.com/marketplace/apps/clever-vpn)
+
 ## FAQ
 ### How to resolve installation error： "Don't find kernel-devel of current kernel version x.x.x-xxx! Maybe you need to update your kernel for it!"
 Clever-VPN-Server服务器在运行时，需要编译vpn协议内核模块，它需要linux内核模块编译环境。这个环境存放在/lib/modules/$(uname -r)/build目录下。如果这个目录不存在或者是空，则表示它没有当前内核模块编译环境。正常情况下，安装程序在跟您确认后，会自动安装。有时，安装时找不到与当前内核匹配的内核模块编译环境，这是因为内核版本较老，发行厂商的软件仓库不再提供造成的。遇到这种情况，应该升级你的内核，重新启动服务器，再进行安装。
