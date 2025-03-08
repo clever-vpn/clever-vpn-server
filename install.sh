@@ -14,6 +14,8 @@ NON_INTERACTIVE=""
 SERVER_NAME="clever-vpn-server"
 SERVER_TOOL="clever-vpn"
 INSTALLER="/usr/bin/${SERVER_TOOL}"
+VERSION="latest"
+SKIP_PKG=""
 
 user_input() {
   local prompt="$1" # 获取提示信息
@@ -114,10 +116,10 @@ pkg_cmd() {
       $cmd -Sy
       $cmd -S --needed $NO_CONFIRM tar
       ;;
-    zypper) 
-      $cmd refresh $NON_INTERACTIVE 
+    zypper)
+      $cmd refresh $NON_INTERACTIVE
       $cmd install $NON_INTERACTIVE tar
-    ;;
+      ;;
     esac
 
   } ;;
@@ -137,10 +139,10 @@ pkg_cmd() {
       $cmd -Sy
       $cmd -S --needed $NO_CONFIRM make gcc
       ;;
-    zypper) 
-      $cmd refresh $NON_INTERACTIVE 
+    zypper)
+      $cmd refresh $NON_INTERACTIVE
       $cmd install $NON_INTERACTIVE make gcc
-    ;;
+      ;;
     esac
 
   } ;;
@@ -158,7 +160,7 @@ pkg_cmd() {
     pacman)
       $cmd -S --needed $NO_CONFIRM linux-headers
       ;;
-    zypper) 
+    zypper)
       $cmd install $NON_INTERACTIVE kernel-devel
       ;;
     esac
@@ -215,7 +217,7 @@ function checkOS() {
   fi
 
   ## support virt
-  if ! checkVirt ; then
+  if ! checkVirt; then
     retrun 1
   fi
 
@@ -227,6 +229,10 @@ function checkOS() {
     else
       return 1
     fi
+  fi
+
+  if [[ -n $SKIP_PKG ]]; then
+    return 0
   fi
 
   # include make enviroment
@@ -311,7 +317,7 @@ getGithubRelease() {
 
 install() {
 
-  getGithubRelease "clever-vpn" "${SERVER_NAME}" "latest" "${SERVER_NAME}.tar.gz" ""
+  getGithubRelease "clever-vpn" "${SERVER_NAME}" "${VERSION}" "${SERVER_NAME}.tar.gz" ""
 
   echo "Installing..."
 
@@ -354,6 +360,8 @@ help() {
   echo "Usage:"
   echo "installer install  [token]"
   echo "installer install_y  [token]"
+  echo "installer install_ex  token=[token] version=[version]"
+  echo "installer install_ex_y  token=[token] version=[version]"
   echo "installer uninstall"
   echo "installer help"
 }
@@ -388,6 +396,55 @@ main() {
         else
           echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
         fi
+      } ;;
+
+      uninstall) {
+        echo "Uninstalling ..."
+        uninstall || :
+      } ;;
+
+      install_ex_y) {
+        YES="-y"
+        NO_CONFIRM="--noconfirm"
+        NON_INTERACTIVE="-n"
+      } ;&
+      install_ex) {
+        shift
+        echo "Installing ..."
+
+        SKIP_PKG="yes"
+
+        for arg in "$@"; do
+          case $arg in
+          token=*)
+            token="${arg#*=}"
+            shift
+            ;;
+          version=*)
+            VERSION="${arg#*=}"
+            shift
+            ;;
+          *) ;;
+          esac
+        done
+
+        if [[ -z "$token" ]]; then
+          token=$(get_token)
+        fi
+
+        if ! initialCheck; then
+          echo "Errror: Clever VPN Server installation failed! Contact us by Web chat"
+          exit 1
+        fi
+
+        uninstall || :
+        # if install $@; then
+        if install $token; then
+          echo "Clever VPN Server is installed successly! Congratulation!"
+        else
+          echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
+        fi
+
       } ;;
       *)
         help
