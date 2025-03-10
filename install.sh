@@ -333,6 +333,24 @@ install() {
   return $code
 }
 
+upgrade() {
+
+  getGithubRelease "clever-vpn" "${SERVER_NAME}" "${VERSION}" "${SERVER_NAME}.tar.gz" ""
+
+  echo "Upgrading..."
+
+  tar -xzf ${SERVER_NAME}.tar.gz
+  if ${SERVER_NAME}${INSTALLER} "upgrade" "$(pwd)/${SERVER_NAME}"; then
+    code=0
+  else
+    code=1
+  fi
+
+  rm -rf ${SERVER_NAME} ${SERVER_NAME}.tar.gz
+
+  return $code
+}
+
 uninstall() {
   if [[ -e ${INSTALLER} ]]; then
     ${INSTALLER} "uninstall"
@@ -362,6 +380,7 @@ help() {
   echo "installer install_y  [token]"
   echo "installer install_ex  token=[token] version=[version]"
   echo "installer install_ex_y  token=[token] version=[version]"
+  echo "installer upgrade version=[version]"
   echo "installer uninstall"
   echo "installer help"
 }
@@ -445,6 +464,26 @@ main() {
           echo "Errror: Clever VPN Server installation failed! Contact us by Web chat  "
         fi
 
+      } ;;
+      upgrade) {
+        shift
+        echo "Upgrading ..."
+
+        for arg in "$@"; do
+          case $arg in
+          version=*)
+            VERSION="${arg#*=}"
+            shift
+            ;;
+          *) ;;
+          esac
+        done
+
+        if upgrade; then
+          echo "Clever VPN Server is upgraded successly! Congratulation!"
+        else
+          echo "Errror: Clever VPN Server upgrade failed! Contact us by Web chat  "
+        fi
       } ;;
       *)
         help
