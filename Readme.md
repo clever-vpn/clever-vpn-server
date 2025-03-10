@@ -2,7 +2,7 @@
 
 It is VPN server software that implements the Clever VPN protocol in the Linux kernel. Due to the kernelization of the VPN protocol, it efficiently adapts to dynamic changes, resulting in powerful anti-packet inspection capabilities. It operates 365 days a year, ensuring seamless access even on special dates. 
 
-Please visist https://www.clever-vpn.net for more information.
+Please visist [https://www.clever-vpn.net](https://www.clever-vpn.net) for more information.
 
 ## Why Clever VPN?
 
