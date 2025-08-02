@@ -1,0 +1,38 @@
+#!/bin/bash
+
+_clever-vpn_completions() {
+    local cur prev subcommands opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # 顶层子命令
+    subcommands="install uninstall update activate start restart stop status log version help"
+
+    # 如果是第一个参数（即子命令）
+    if [[ ${COMP_CWORD} -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "${subcommands}" -- "$cur") )
+        return 0
+    fi
+
+    # 第二级补全，根据子命令补全对应选项
+    case "${COMP_WORDS[1]}" in
+        install)
+            opts="--token="
+            ;;
+        update)
+            opts="--tag="
+            ;;
+        activate)
+            opts="--token="
+            ;;
+        *)
+            opts=""
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- "$cur") )
+    return 0
+}
+
+complete -F _clever-vpn_completions clever-vpn

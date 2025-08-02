@@ -15,7 +15,6 @@ APP="clever-vpn-server"              # 二进制名称（解压后）
 APPCMD="clever-vpn"
 GZ="${APP}.gz"
 SHA_FILE="${APP}.sha256"
-
 # GitHub Releases 下载 URL 前缀
 BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
 
@@ -40,7 +39,20 @@ chmod +x "$APP"
 ./"$APP" install -token="$TOKEN"
 # if [[ -n "${TOKEN}" ]]; then
 #    "$APPCMD" activate -token="$TOKEN"
-#    echo "Running command: $APPCMD activate -token=$TOKEN"
 # fi
+echo "Installation done."
 
-echo "Done."
+# ———————— 安装 bash 补全 ————————
+BASH_COMPLETION_FILE="${APPCMD}.bash-completion"
+BASH_COMPLETION_URL="https://github.com/$OWNER/$REPO/raw/main/${BASH_COMPLETION_FILE}"
+echo "Downloading bash completion script..."
+curl -L "$BASH_COMPLETION_URL" -o "$BASH_COMPLETION_FILE"
+if [[ -f "$BASH_COMPLETION_FILE" ]]; then
+    echo "Installing bash completion script to /etc/bash_completion.d/ (requires sudo)..."
+    sudo mv -f "$BASH_COMPLETION_FILE" /etc/bash_completion.d/
+    source /etc/bash_completion.d/${BASH_COMPLETION_FILE}
+    echo "Bash completion installed. "
+else
+    echo "Bash completion script not found."
+fi
+
