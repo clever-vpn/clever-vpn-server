@@ -50,8 +50,7 @@ curl -L "$BASH_COMPLETION_URL" -o "$BASH_COMPLETION_FILE"
 if [[ -f "$BASH_COMPLETION_FILE" ]]; then
     echo "Installing bash completion script to /etc/bash_completion.d/ (requires sudo)..."
     sudo mv -f "$BASH_COMPLETION_FILE" /etc/bash_completion.d/
-    source /etc/bash_completion.d/${BASH_COMPLETION_FILE}
-    echo "Bash completion installed. "
+    echo "Bash completion installed. please restart your shell or run 'source /etc/bash_completion.d/${BASH_COMPLETION_FILE}' to enable it. You can test it by typing '${APPCMD} <TAB><TAB>'."
 else
     echo "Bash completion script not found."
 fi
