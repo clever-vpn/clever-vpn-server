@@ -37,9 +37,6 @@ echo "Checksum verified successfully."
 echo "Running '$APP install'..."
 chmod +x "$APP"
 ./"$APP" install -token="$TOKEN"
-# if [[ -n "${TOKEN}" ]]; then
-#    "$APPCMD" activate -token="$TOKEN"
-# fi
 echo "Installation done."
 
 # ———————— 安装 bash 补全 ————————
