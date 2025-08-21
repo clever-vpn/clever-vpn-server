@@ -1,12 +1,78 @@
-# Clever-VPN-Server: Linux kernel-based VPN Server
+# Clever-VPN-Server: Linux Kernel-based Clustered VPN Server
 
-It is VPN server software that implements the Clever VPN protocol in the Linux kernel. Due to the kernelization of the VPN protocol, it efficiently adapts to dynamic changes, resulting in powerful anti-packet inspection capabilities. It operates 365 days a year, ensuring seamless access even on special dates. 
+It is VPN server software that implements the Clever VPN protocol in the Linux kernel with clustering capabilities. Due to the kernelization of the VPN protocol and clustered deployment, it efficiently adapts to dynamic changes, resulting in powerful anti-packet inspection capabilities and high availability. It operates 365 days a year, ensuring seamless access even on special dates. 
 
 Please visist [https://www.clever-vpn.net](https://www.clever-vpn.net) for more information.
 
-## Why Clever VPN?
+## Why Us?
 
-[![](/images/why-clever-vpn.png)](https://www.clever-vpn.net)
+### Overview
+With our SaaS based all‑in‑one VPN service platform, you don't need any technical background—you can become a professional VPN service provider in just 5 minutes and deliver enterprise‑grade VPN services to your users. We are the first cloud provider to offer a SaaS platform specifically for VPN service providers.
+
+### Who are we?
+We are a geek team of experts in the Linux kernel and VPN protocols. By deeply integrating VPN protocols into the Linux kernel and deploying servers in clustered form, we have dramatically improved our anti‑censorship capabilities and system stability. This solves the traditional VPN pain points of easy blocking and heavy maintenance burdens (especially frequent app updates to counter GFW blocking rules), making VPN‑as‑a‑Service a reality. As a VPN service provider using our platform, you will significantly reduce hardware investment, R&D and maintenance costs, and greatly boost operational efficiency.
+
+Our philosophy: focus on core technology, deliver stable and reliable Software‑as‑a‑Service (SaaS), and eliminate redundant marketing and excess UI—true value driven by technology.
+
+### What We Offer？
+We provide a full-suite VPN service solution (SaaS):
+
+<img src="https://clever-vpn.net/img/architecture.svg" alt="System Architecture" width="800"/>
+
+#### 📱 APP Client - 🔓 **100% Open Source**
+Users connect via our app, which features:
+- All client source code is open source under MIT license, supporting customization and secondary development:
+  - ![Apple](https://img.shields.io/badge/Apple-000000?style=flat&logo=apple&logoColor=white) **[Apple (iOS/macOS) Client](https://github.com/clever-vpn/clever-vpn-client-apple)** - Native iOS and macOS applications
+  - ![Android](https://img.shields.io/badge/Android-3DDC84?style=flat&logo=android&logoColor=white) **[Android Client](https://github.com/clever-vpn/clever-vpn-client-android)** - Native Android application  
+  - ![Windows](https://img.shields.io/badge/Windows-0078D4?style=flat&logo=windows&logoColor=white) **[Windows Client](https://github.com/clever-vpn/clever-vpn-client-windows)** - Native Windows application
+- Configurable support/contact information can be managed in the backend, so your users always know how to reach you.
+- Cross‑platform support (macOS, iOS, Android, Windows, etc.).
+
+#### VPN Server Cluster Software
+This is the VPN server software that implements the Clever VPN protocol and cluster management in the Linux kernel. It must be installed on your VPN servers. Key functions include:
+- Coordination with the cloud management platform for intelligent cluster orchestration.
+- Providing VPN connectivity services to the client apps.
+
+#### VPN Service Cloud Platform (SaaS)
+Key features:
+- A management interface for VPN service providers to handle server clusters and user license management.
+- License synchronization for VPN clients.
+- VPN server cluster orchestration.
+- API endpoints for integration with your CRM.
+
+### How to use our services：
+1. Log in to the VPN Service Cloud Platform at [https://www.clever-vpn.net](https://www.clever-vpn.net).
+2. Create a VPN server. If you use our provided VPS, the VPN Server Cluster software will be installed automatically. If you use your own server, we guide you through a simple install script to get the software running.
+3. Create user accounts on the cloud platform. Each account supports 1, 2, or 3 devices and is associated with a unique activation code.
+4. Users download the appropriate app for their device and activate it using their account's activation code.
+5. Once activated, the app is ready for use.
+
+### Our Advantages
+
+#### VPN Protocol Kernel Integration
+We are the first VPN provider to implement the VPN protocol directly in the Linux kernel. Our solution is simpler, faster, and more adaptive than others. Kernel‑level innovation combined with cloud‑based operations drives an exponential reduction in operating costs and heralds a revolution in the industry.
+
+#### VPN Server Clustering
+Our proprietary clustered VPN server technology features intelligent routing, automatic load balancing, region‑based node management, and support for millions of users.
+
+#### Standardized & Open‑Source Apps—No Updates Required
+By moving all VPN protocol logic to the cloud, our VPN apps are standardized and no longer need constant updates to counter GFW block rules. All our client apps are open‑source on GitHub, enabling VPN service providers to white‑label and customize them without maintaining a large app development team.
+
+#### Micro‑Sized VPN Servers
+Since our VPN protocol runs in the Linux kernel, efficiency is greatly improved. You can become a VPN service provider with a small, low‑cost VPS for just a few dollars a month.
+
+#### Unmatched Circumvention Capabilities
+Kernel‑level implementation allows our VPN protocol to adapt dynamically to blocking tactics, delivering powerful anti‑detection abilities. Enjoy 365‑day uninterrupted access—even on sensitive dates, you can bypass censorship with ease.
+
+#### Zero barriers
+##### 1. Pay‑as‑You‑Go:
+Hourly billing means you only pay for the VPN service when you use it—no usage, no charge.
+
+##### 2. Monthly Billing:
+Operate on a credit model—use now, pay later at month's end. Users enjoy a credit limit with zero risk of service disruption.
+
+#### "Price Slayer"
+We offer industry-leading low rates to our customers. It's just 1/10 of the industry standard. A license costs only $1/month.
 
 ## Basic Usage
 
@@ -19,7 +85,7 @@ bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server/raw/main/inst
 - Activate <br/>
   visit https://www.clever-vpn.net to create a server. you can get a token of activate
 ```
-clever-vpn activate [token]
+clever-vpn activate -token=[token]
 ```
 **Check the Server Status**
 
@@ -58,34 +124,3 @@ clever-vpn uninstall
 ## One-click App of Cloud Provider Install
 - Vultr: [https://www.vultr.com/marketplace/apps/clever-vpn](https://www.vultr.com/marketplace/apps/clever-vpn)
 
-## FAQ
-### How to resolve installation error： "Don't find kernel-devel of current kernel version x.x.x-xxx! Maybe you need to update your kernel for it!"
-Clever-VPN-Server服务器在运行时，需要编译vpn协议内核模块，它需要linux内核模块编译环境。这个环境存放在/lib/modules/$(uname -r)/build目录下。如果这个目录不存在或者是空，则表示它没有当前内核模块编译环境。正常情况下，安装程序在跟您确认后，会自动安装。有时，安装时找不到与当前内核匹配的内核模块编译环境，这是因为内核版本较老，发行厂商的软件仓库不再提供造成的。遇到这种情况，应该升级你的内核，重新启动服务器，再进行安装。
-
-Clever-VPN-Server server requires the VPN protocol kernel module to be compiled while running, and it needs the Linux kernel module compilation environment. This environment is stored in the /lib/modules/$(uname -r)/build directory. If this directory does not exist or is empty, it indicates that the current kernel module compilation environment is not present. Normally, the installer will automatically install it after confirming with you. Sometimes, the installer cannot find the kernel module compilation environment that matches the current kernel. This is because the kernel version is too old, and the software repository from the distribution vendor no longer provides it. In such cases, you should upgrade your kernel, reboot the server, and then proceed with the installation.
-
-### 内核升级方法
-- apt
-  ```
-  sudo apt update
-  sudo apt install linux-image
-  sudo reboot
-  ```
-- dnf/yum
-  ```
-  sudo dnf refresh
-  sudo dnf install kernel
-  sudo reboot
-  ```
-- pacman
-  ```
-  sudo pacman -Syu
-  sudo pacman -S linux
-  sudo reboot
-  ```
-- zypper
-  ```
-  sudo zypper refresh
-  sudo zypper install  kernel-default
-  sudo reboot
-  ```
