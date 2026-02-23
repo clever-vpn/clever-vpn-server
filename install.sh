@@ -17,51 +17,13 @@ SHA_FILE="${APP}.sha256"
 # GitHub Releases 下载 URL 前缀
 BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
 
-# 配置文件路径
-CONFIG_DIR="/etc/clever-vpn-server"
-CONFIG_FILE="${CONFIG_DIR}/clever-vpn-server.conf"
-TOKEN_FILE="${CONFIG_DIR}/token"
-
-# 备份文件路径
-BACKUP_DIR="/tmp/clever-vpn-backup"
-BACKUP_CONFIG_FILE="${BACKUP_DIR}/clever-vpn-server.conf"
-BACKUP_TOKEN_FILE="${BACKUP_DIR}/token"
-
 # ———————— 检查是否已安装 ————————
 echo "Checking if clever-vpn is installed..."
-if ! command -v clever-vpn &> /dev/null; then
-    echo "clever-vpn is not installed. Proceeding with fresh installation..."
-    FRESH_INSTALL=true
-else
-    echo "clever-vpn found. Proceeding with upgrade..."
-    FRESH_INSTALL=false
-    
-    # ———————— 备份配置文件 ————————
-    echo "Backing up configuration files..."
-    mkdir -p "$BACKUP_DIR"
-
-    # 备份配置文件（如果存在）
-    if [[ -f "$CONFIG_FILE" ]]; then
-        echo "Backing up $CONFIG_FILE..."
-        cp "$CONFIG_FILE" "$BACKUP_CONFIG_FILE"
-        echo "Configuration file backed up."
-    else
-        echo "Configuration file $CONFIG_FILE does not exist."
-    fi
-
-    # 备份 token 文件（如果存在）
-    if [[ -f "$TOKEN_FILE" ]]; then
-        echo "Backing up $TOKEN_FILE..."
-        cp "$TOKEN_FILE" "$BACKUP_TOKEN_FILE"
-        echo "Token file backed up."
-    else
-        echo "Token file $TOKEN_FILE does not exist."
-    fi
-
-    # ———————— 卸载现有服务 ————————
-    echo "Uninstalling existing clever-vpn server..."
-    clever-vpn uninstall || echo "Warning: uninstall command failed, continuing anyway..."
+if command -v clever-vpn &> /dev/null; then
+    echo "clever-vpn is already installed. Please uninstall it first if you want to reinstall."
+    exit 1
 fi
+echo "clever-vpn is not installed. Proceeding with installation..."
 
 # ———————— 下载新版本 ————————
 echo "Downloading $GZ and checksum..."
@@ -88,10 +50,6 @@ INSTALL_TOKEN=""
 if [[ -n "$TOKEN" ]]; then
     # 如果提供了 TOKEN 参数，使用它
     INSTALL_TOKEN="$TOKEN"
-elif [[ "$FRESH_INSTALL" == "false" && -f "$BACKUP_TOKEN_FILE" ]]; then
-    # 如果是升级且有备份的 token 文件，读取它
-    INSTALL_TOKEN=$(cat "$BACKUP_TOKEN_FILE")
-    echo "Using token from backup file."
 else
     echo "No token provided, installing without token."
 fi
@@ -104,26 +62,8 @@ else
 fi
 echo "Installation done."
 
-# ———————— 恢复配置文件 ————————
-if [[ "$FRESH_INSTALL" == "false" ]]; then
-    echo "Restoring configuration files..."
-
-    # 恢复配置文件（如果有备份）
-    if [[ -f "$BACKUP_CONFIG_FILE" ]]; then
-        echo "Restoring configuration file..."
-        sudo mkdir -p "$CONFIG_DIR"
-        sudo cp "$BACKUP_CONFIG_FILE" "$CONFIG_FILE"
-        echo "Configuration file restored."
-    fi
-else
-    echo "Fresh installation completed. No configuration to restore."
-fi
-
-# ———————— 清理备份和临时文件 ————————
+# ———————— 清理临时文件 ————————
 echo "Cleaning up..."
-if [[ "$FRESH_INSTALL" == "false" ]]; then
-    rm -rf "$BACKUP_DIR"
-fi
 rm -f "$GZ" "$SHA_FILE" "$APP"
 
 # ———————— 安装 bash 补全 ————————
@@ -140,10 +80,5 @@ else
     echo "Bash completion script not found."
 fi
 
-if [[ "$FRESH_INSTALL" == "true" ]]; then
-    echo "Installation completed successfully!"
-    echo "clever-vpn server version $TAG has been installed."
-else
-    echo "Upgrade completed successfully!"
-    echo "clever-vpn server has been upgraded to version $TAG."
-fi
+echo "Installation completed successfully!"
+echo "clever-vpn server version $TAG has been installed."
