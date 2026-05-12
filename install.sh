@@ -56,10 +56,41 @@ auto_upgrade_patch() {
     fi
 }
 
-if command -v gh &> /dev/null; then
+# ———————— 确保 gh CLI 可用（仅 Linux） ————————
+ensure_gh() {
+    if command -v gh &> /dev/null; then
+        return 0
+    fi
+    echo "gh CLI not found. Attempting to install..."
+    if command -v apt-get &> /dev/null; then
+        echo "Installing gh via apt-get (requires sudo)..."
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt-get update && sudo apt-get install -y gh
+    elif command -v yum &> /dev/null; then
+        echo "Installing gh via yum (requires sudo)..."
+        sudo yum install -y gh
+    elif command -v dnf &> /dev/null; then
+        echo "Installing gh via dnf (requires sudo)..."
+        sudo dnf install -y gh
+    else
+        echo "ERROR: No supported package manager found. Please install gh manually: https://cli.github.com/"
+        return 1
+    fi
+    # 验证安装
+    if command -v gh &> /dev/null; then
+        echo "gh CLI installed successfully."
+        return 0
+    else
+        echo "ERROR: gh CLI installation failed. Please install manually: https://cli.github.com/"
+        return 1
+    fi
+}
+
+if ensure_gh; then
     TAG=$(auto_upgrade_patch "$TAG")
 else
-    echo "Warning: gh CLI not found, skipping patch auto-upgrade."
+    echo "Warning: proceeding without patch auto-upgrade."
 fi
 
 # ———————— 构建下载 URL ————————
