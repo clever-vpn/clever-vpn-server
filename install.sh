@@ -39,13 +39,13 @@ auto_upgrade_patch() {
         local prefix="v${major}.${minor}."
         # 调试信息输出到 stderr，避免被 $() 捕获混入返回值
         echo "Detected patch version $tag, searching for latest in $prefix* ..." >&2
-        # 通过 GitHub API 获取所有 tags，筛选 vX.Y.Z 格式，取最大 Z
-        # 临时关闭 pipefail：grep 无匹配时返回 1 不应中断脚本
+        # 通过 GitHub API 获取所有 releases，筛选 vX.Y.Z 格式，取最大 Z
+        # 用 /releases 而非 /tags：后者包含无 release 的纯 tag
         local latest
         set +o pipefail
         latest=$(curl -sSL --connect-timeout 5 --max-time 10 \
-            "https://api.github.com/repos/$OWNER/$REPO/tags?per_page=100" 2>/dev/null \
-            | grep -oE '"name": *"'"${prefix}[0-9]+"'"' \
+            "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=100" 2>/dev/null \
+            | grep -oE '"tag_name": *"'"${prefix}[0-9]+"'"' \
             | grep -oE "${prefix}[0-9]+" \
             | sort -t '.' -k3 -n 2>/dev/null \
             | tail -1)
