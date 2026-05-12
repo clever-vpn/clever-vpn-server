@@ -110,6 +110,12 @@ echo "Decompressing $GZ..."
 # -f：如果已有同名文件，直接覆盖
 gunzip -f "$GZ"
 
+# 多架构模式下，解压后的文件名与 sha256 文件中引用的名称不一致，需要重命名
+DECOMPRESSED="${GZ%.gz}"
+if [[ "$DECOMPRESSED" != "$APP" ]]; then
+    mv -f "$DECOMPRESSED" "$APP"
+fi
+
 # 校验
 echo "Verifying checksum..."
 sha256sum --check "$SHA_FILE"
