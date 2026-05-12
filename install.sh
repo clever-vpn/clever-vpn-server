@@ -56,46 +56,27 @@ auto_upgrade_patch() {
     fi
 }
 
-# ———————— 确保 gh CLI 可用 ————————
+# ———————— 确保 gh CLI 可用（仅 Linux） ————————
 ensure_gh() {
     if command -v gh &> /dev/null; then
         return 0
     fi
     echo "gh CLI not found. Attempting to install..."
-    local os
-    os=$(uname -s)
-    case "$os" in
-        Darwin)
-            if command -v brew &> /dev/null; then
-                echo "Installing gh via Homebrew..."
-                brew install gh
-            else
-                echo "ERROR: Homebrew not found. Please install gh manually: https://cli.github.com/"
-                return 1
-            fi
-            ;;
-        Linux)
-            if command -v apt-get &> /dev/null; then
-                echo "Installing gh via apt-get (requires sudo)..."
-                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-                sudo apt-get update && sudo apt-get install -y gh
-            elif command -v yum &> /dev/null; then
-                echo "Installing gh via yum (requires sudo)..."
-                sudo yum install -y gh
-            elif command -v dnf &> /dev/null; then
-                echo "Installing gh via dnf (requires sudo)..."
-                sudo dnf install -y gh
-            else
-                echo "ERROR: No supported package manager found. Please install gh manually: https://cli.github.com/"
-                return 1
-            fi
-            ;;
-        *)
-            echo "ERROR: Unsupported OS '$os'. Please install gh manually: https://cli.github.com/"
-            return 1
-            ;;
-    esac
+    if command -v apt-get &> /dev/null; then
+        echo "Installing gh via apt-get (requires sudo)..."
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt-get update && sudo apt-get install -y gh
+    elif command -v yum &> /dev/null; then
+        echo "Installing gh via yum (requires sudo)..."
+        sudo yum install -y gh
+    elif command -v dnf &> /dev/null; then
+        echo "Installing gh via dnf (requires sudo)..."
+        sudo dnf install -y gh
+    else
+        echo "ERROR: No supported package manager found. Please install gh manually: https://cli.github.com/"
+        return 1
+    fi
     # 验证安装
     if command -v gh &> /dev/null; then
         echo "gh CLI installed successfully."
