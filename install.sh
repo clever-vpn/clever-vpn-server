@@ -38,10 +38,11 @@ auto_upgrade_patch() {
         local minor="${BASH_REMATCH[2]}"
         local prefix="v${major}.${minor}."
         echo "Detected patch version $tag, searching for latest in $prefix* ..."
-        # 获取所有 release tag，筛选 vX.Y.Z 格式，取最大 Z
+        # 通过 GitHub API 获取所有 tags，筛选 vX.Y.Z 格式，取最大 Z
         local latest
-        latest=$(gh release list -R "$OWNER/$REPO" --limit 200 --json tagName --jq '.[].tagName' \
-            | grep -E "^${prefix}[0-9]+$" \
+        latest=$(curl -sSL "https://api.github.com/repos/$OWNER/$REPO/tags?per_page=100" \
+            | grep -oE '"name": *"'"${prefix}[0-9]+"'"' \
+            | grep -oE "${prefix}[0-9]+" \
             | sort -t '.' -k3 -n \
             | tail -1)
         if [[ -n "$latest" ]]; then
@@ -56,42 +57,7 @@ auto_upgrade_patch() {
     fi
 }
 
-# ———————— 确保 gh CLI 可用（仅 Linux） ————————
-ensure_gh() {
-    if command -v gh &> /dev/null; then
-        return 0
-    fi
-    echo "gh CLI not found. Attempting to install..."
-    if command -v apt-get &> /dev/null; then
-        echo "Installing gh via apt-get (requires sudo)..."
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-        sudo apt-get update && sudo apt-get install -y gh
-    elif command -v yum &> /dev/null; then
-        echo "Installing gh via yum (requires sudo)..."
-        sudo yum install -y gh
-    elif command -v dnf &> /dev/null; then
-        echo "Installing gh via dnf (requires sudo)..."
-        sudo dnf install -y gh
-    else
-        echo "ERROR: No supported package manager found. Please install gh manually: https://cli.github.com/"
-        return 1
-    fi
-    # 验证安装
-    if command -v gh &> /dev/null; then
-        echo "gh CLI installed successfully."
-        return 0
-    else
-        echo "ERROR: gh CLI installation failed. Please install manually: https://cli.github.com/"
-        return 1
-    fi
-}
-
-if ensure_gh; then
-    TAG=$(auto_upgrade_patch "$TAG")
-else
-    echo "Warning: proceeding without patch auto-upgrade."
-fi
+TAG=$(auto_upgrade_patch "$TAG")
 
 # ———————— 构建下载 URL ————————
 BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
