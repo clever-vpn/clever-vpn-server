@@ -159,10 +159,14 @@ else
 fi
 
 echo "Running '$APP install'..."
-if [[ -n "$INSTALL_TOKEN" ]]; then
-    ./"$APP" install -token="$INSTALL_TOKEN"
+if [[ "${CI:-}" == "true" ]]; then
+    echo "CI environment detected, skipping service installation."
 else
-    ./"$APP" install
+    if [[ -n "$INSTALL_TOKEN" ]]; then
+        ./"$APP" install -token="$INSTALL_TOKEN"
+    else
+        ./"$APP" install
+    fi
 fi
 echo "Installation done."
 
