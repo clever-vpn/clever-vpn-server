@@ -37,7 +37,8 @@ auto_upgrade_patch() {
         local major="${BASH_REMATCH[1]}"
         local minor="${BASH_REMATCH[2]}"
         local prefix="v${major}.${minor}."
-        echo "Detected patch version $tag, searching for latest in $prefix* ..."
+        # 调试信息输出到 stderr，避免被 $() 捕获混入返回值
+        echo "Detected patch version $tag, searching for latest in $prefix* ..." >&2
         # 通过 GitHub API 获取所有 tags，筛选 vX.Y.Z 格式，取最大 Z
         # 临时关闭 pipefail：grep 无匹配时返回 1 不应中断脚本
         local latest
@@ -50,10 +51,10 @@ auto_upgrade_patch() {
             | tail -1)
         set -o pipefail
         if [[ -n "$latest" ]]; then
-            echo "Auto-upgraded to latest patch: $latest"
+            echo "Auto-upgraded to latest patch: $latest" >&2
             echo "$latest"
         else
-            echo "Warning: no releases found matching $prefix*, using original tag $tag"
+            echo "Warning: no releases found matching $prefix*, using original tag $tag" >&2
             echo "$tag"
         fi
     else
