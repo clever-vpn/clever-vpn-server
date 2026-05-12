@@ -12,10 +12,83 @@ TAG="$1"  # 比如 v1.2.3，或者你要安装的具体版本号
 TOKEN="${2:-}"  # 可选的 TOKEN 参数
 APP="clever-vpn-server"              # 二进制名称（解压后）
 APPCMD="clever-vpn"
+
+# ———————— 探测当前系统架构 ————————
+detect_arch() {
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64|amd64)   echo "amd64" ;;
+        aarch64|arm64)  echo "arm64" ;;
+        armv7l|armv6l)  echo "arm"   ;;
+        i686|i386)      echo "386"   ;;
+        *)              echo "$arch" ;;
+    esac
+}
+
+ARCH=$(detect_arch)
+
+# ———————— patch 版本自动升级 ————————
+# 当 TAG 是 vX.Y.Z 格式时，自动查找 vX.Y 中 Z 值最大的版本
+auto_upgrade_patch() {
+    local tag="$1"
+    # 匹配 vX.Y.Z 格式（Z 为纯数字）
+    if [[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        local major="${BASH_REMATCH[1]}"
+        local minor="${BASH_REMATCH[2]}"
+        local prefix="v${major}.${minor}."
+        echo "Detected patch version $tag, searching for latest in $prefix* ..."
+        # 获取所有 release tag，筛选 vX.Y.Z 格式，取最大 Z
+        local latest
+        latest=$(gh release list -R "$OWNER/$REPO" --limit 200 --json tagName --jq '.[].tagName' \
+            | grep -E "^${prefix}[0-9]+$" \
+            | sort -t '.' -k3 -n \
+            | tail -1)
+        if [[ -n "$latest" ]]; then
+            echo "Auto-upgraded to latest patch: $latest"
+            echo "$latest"
+        else
+            echo "Warning: no releases found matching $prefix*, using original tag $tag"
+            echo "$tag"
+        fi
+    else
+        echo "$tag"
+    fi
+}
+
+if command -v gh &> /dev/null; then
+    TAG=$(auto_upgrade_patch "$TAG")
+else
+    echo "Warning: gh CLI not found, skipping patch auto-upgrade."
+fi
+
+# ———————— 构建下载 URL ————————
+BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
+
+# 文件名：多架构格式 clever-vpn-server-{arch}-{tag}，无架构格式 clever-vpn-server
+GZ_ARCH="${APP}-${ARCH}-${TAG}.gz"
+SHA_ARCH="${APP}-${ARCH}-${TAG}.sha256"
 GZ="${APP}.gz"
 SHA_FILE="${APP}.sha256"
-# GitHub Releases 下载 URL 前缀
-BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
+
+# 探测 release 是否为多架构（通过检查 arch-specific 文件是否存在）
+echo "Detecting release asset format..."
+HTTP_CODE=$(curl -sI -o /dev/null -w "%{http_code}" "$BASE_URL/$GZ_ARCH")
+if [[ "$HTTP_CODE" == "200" || "$HTTP_CODE" == "302" ]]; then
+    echo "Multi-architecture release detected. Using arch: $ARCH"
+    GZ="$GZ_ARCH"
+    SHA_FILE="$SHA_ARCH"
+else
+    echo "Arch-specific asset not found (HTTP $HTTP_CODE)."
+    if [[ "$ARCH" == "amd64" ]]; then
+        echo "Falling back to arch-less format (amd64 compatible)."
+        # GZ 和 SHA_FILE 保持默认无架构命名
+    else
+        echo "ERROR: Architecture '$ARCH' is not supported for this release."
+        echo "       Only amd64 can fall back to arch-less format."
+        exit 1
+    fi
+fi
 
 # ———————— 检查是否已安装 ————————
 echo "Checking if clever-vpn is installed..."
