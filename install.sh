@@ -28,6 +28,91 @@ detect_arch() {
 
 ARCH=$(detect_arch)
 
+# ———————— 环境检查 ————————
+# 检查当前系统是否满足 clever-vpn-server 的运行要求：
+#   1. Linux 操作系统
+#   2. systemd 支持
+#   3. nftables (nft) 支持
+#   4. eBPF 支持（BTF）
+#   5. WireGuard 内核模块
+check_environment() {
+    local errors=0
+
+    echo "=== Checking environment requirements ==="
+
+    # 1. 检查是否为 Linux
+    echo -n "[1/5] Checking Linux OS... "
+    if [[ "$(uname -s)" == "Linux" ]]; then
+        echo "OK ($(uname -s))"
+    else
+        echo "FAILED"
+        echo "       ERROR: This script requires Linux. Detected OS: $(uname -s)"
+        errors=$((errors + 1))
+    fi
+
+    # 2. 检查 systemd（通过 /run/systemd/system 目录或 pidof systemd）
+    echo -n "[2/5] Checking systemd... "
+    if [[ -d /run/systemd/system ]] || pidof systemd &>/dev/null; then
+        echo "OK"
+    else
+        echo "FAILED"
+        echo "       ERROR: systemd is required but not detected."
+        echo "       clever-vpn-server runs as a systemd service."
+        errors=$((errors + 1))
+    fi
+
+    # 3. 检查 nftables（nft 命令行工具）
+    echo -n "[3/5] Checking nftables... "
+    if command -v nft &>/dev/null; then
+        echo "OK ($(nft --version 2>/dev/null | head -1 || echo 'installed'))"
+    else
+        echo "FAILED"
+        echo "       ERROR: nftables (nft) is required but not found."
+        echo "       Install it with: apt-get install nftables  or  yum install nftables"
+        errors=$((errors + 1))
+    fi
+
+    # 4. 检查 eBPF（BTF 支持，通过 /sys/kernel/btf/vmlinux 判断）
+    echo -n "[4/5] Checking eBPF (BTF)... "
+    if [[ -f /sys/kernel/btf/vmlinux ]]; then
+        echo "OK"
+    else
+        echo "FAILED"
+        echo "       ERROR: eBPF BTF support not detected."
+        echo "       Kernel must be compiled with CONFIG_DEBUG_INFO_BTF=y."
+        echo "       Minimum recommended kernel version: 5.4+"
+        errors=$((errors + 1))
+    fi
+
+    # 5. 检查 WireGuard 内核模块
+    echo -n "[5/5] Checking WireGuard kernel module... "
+    if [[ -d /sys/module/wireguard ]] || modprobe wireguard 2>/dev/null; then
+        echo "OK"
+    else
+        echo "FAILED"
+        echo "       ERROR: WireGuard kernel module is required but not available."
+        echo "       Install it with: apt-get install wireguard  or  yum install wireguard-tools"
+        echo "       For older kernels, you may need to install wireguard-dkms."
+        errors=$((errors + 1))
+    fi
+
+    echo ""
+
+    if [[ $errors -gt 0 ]]; then
+        echo "==========================================="
+        echo "  $errors environment check(s) FAILED."
+        echo "  Cannot proceed with installation."
+        echo "  Please fix the issues above and try again."
+        echo "==========================================="
+        exit 1
+    fi
+
+    echo "All environment checks passed."
+    echo ""
+}
+
+check_environment
+
 # ———————— patch 版本自动升级 ————————
 # 当 TAG 是 vX.Y.Z 格式时，自动查找 vX.Y 中 Z 值最大的版本
 auto_upgrade_patch() {
