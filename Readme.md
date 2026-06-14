@@ -80,7 +80,7 @@ We offer industry-leading low rates to our customers. It's just 1/10 of the indu
 - Install Clever-VPN-Server
   visit https://www.clever-vpn.net to create a server. you can get install script with token.  
 ```
-bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh)" @ "v2.0.0"
+bash -c "$(curl -L https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh)" @ "v2.1.0"
 ```
 - Activate <br/>
   visit https://www.clever-vpn.net to create a server. you can get a token of activate
