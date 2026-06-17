@@ -26,6 +26,9 @@ _clever-vpn_completions() {
         activate)
             opts="--token="
             ;;
+        log)
+            opts="-n="
+            ;;
         *)
             opts=""
             ;;
