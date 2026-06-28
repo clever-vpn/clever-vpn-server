@@ -1,0 +1,112 @@
+name: Build DigitalOcean Snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v2.1.6 or 2.1.6)'
+        required: true
+        type: string
+      region:
+        description: 'DigitalOcean region'
+        required: false
+        type: choice
+        default: 'nyc3'
+        options:
+          - nyc1
+          - nyc3
+          - sfo3
+          - ams3
+          - sgp1
+          - lon1
+          - fra1
+          - tor1
+          - blr1
+          - syd1
+
+permissions:
+  contents: read
+
+jobs:
+  build-snapshot:
+    name: Build DO Snapshot - ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Resolve version ────────────────────────────────────
+      - name: Normalize version
+        id: version
+        run: |
+          RAW="${{ inputs.version }}"
+          # Strip leading 'v' if present, then re-add
+          CLEAN="${RAW#v}"
+          echo "tag=v${CLEAN}" >> "$GITHUB_OUTPUT"
+
+      # ── Bitwarden: validate secret ID ──────────────────────
+      - name: Validate Bitwarden secret ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          BW_ID='${{ vars.BW_SECRET_ID_DO_TOKEN }}'
+          if [[ -z "$BW_ID" ]]; then
+            echo "BW_SECRET_ID_DO_TOKEN is empty. Set vars.BW_SECRET_ID_DO_TOKEN to the Bitwarden secret UUID for your DigitalOcean API token."
+            exit 1
+          fi
+          if [[ ! "$BW_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "BW_SECRET_ID_DO_TOKEN must be a Bitwarden secret UUID, got: $BW_ID"
+            exit 1
+          fi
+
+      # ── Bitwarden: load DO token ───────────────────────────
+      - name: Load DigitalOcean token from Bitwarden
+        uses: bitwarden/sm-action@v3.0.0
+        with:
+          access_token: ${{ secrets.BW_SM_ACCESS_TOKEN }}
+          secrets: |
+            ${{ vars.BW_SECRET_ID_DO_TOKEN }} > DIGITALOCEAN_TOKEN
+
+      # ── Packer ─────────────────────────────────────────────
+      - name: Set up Packer
+        uses: hashicorp/setup-packer@v3
+        with:
+          version: latest
+
+      - name: Initialize Packer
+        working-directory: packer
+        run: packer init clever-vpn-server.pkr.hcl
+
+      - name: Validate Packer template
+        working-directory: packer
+        run: packer validate -var "do_token=$DO_TOKEN" -var "version=$VERSION" clever-vpn-server.pkr.hcl
+        env:
+          DO_TOKEN: ${{ env.DIGITALOCEAN_TOKEN }}
+          VERSION: ${{ steps.version.outputs.tag }}
+
+      - name: Build snapshot
+        working-directory: packer
+        run: |
+          packer build \
+            -var "do_token=$DO_TOKEN" \
+            -var "version=$VERSION" \
+            -var "region=$REGION" \
+            clever-vpn-server.pkr.hcl
+        env:
+          DO_TOKEN: ${{ env.DIGITALOCEAN_TOKEN }}
+          VERSION: ${{ steps.version.outputs.tag }}
+          REGION: ${{ inputs.region }}
+
+      # ── Summary ────────────────────────────────────────────
+      - name: Summary
+        if: success()
+        run: |
+          {
+            echo "### DigitalOcean Snapshot Build Complete"
+            echo ""
+            echo "- **Version**: ${{ steps.version.outputs.tag }}"
+            echo "- **Region**: ${{ inputs.region }}"
+            echo "- **Snapshot name**: \`clever-vpn-server-${{ steps.version.outputs.tag }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
