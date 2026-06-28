@@ -57,11 +57,19 @@ source "digitalocean" "clever-vpn" {
 build {
   sources = ["source.digitalocean.clever-vpn"]
 
+  # Upload the repo's own install.sh to the Droplet
+  provisioner "file" {
+    source      = "${path.root}/../install.sh"
+    destination = "/tmp/install.sh"
+  }
+
+  # Run install.sh with the version tag (no token — base snapshot only)
   provisioner "shell" {
-    environment_vars = [
-      "APP_VERSION=${local.tag}",
+    inline = [
+      "chmod +x /tmp/install.sh",
+      "bash /tmp/install.sh ${local.tag}",
+      "rm -f /tmp/install.sh",
     ]
-    script = "${path.root}/scripts/install.sh"
   }
 
   # Post-install cleanup: remove cloud-init data and machine-specific state
