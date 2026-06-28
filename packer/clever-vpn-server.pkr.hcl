@@ -36,7 +36,7 @@ locals {
   tag                = "v${local.normalized_version}"
   # DO tags cannot contain dots — replace with dashes
   tag_safe           = replace(local.tag, ".", "-")
-  snapshot_name      = "clever-vpn-server-${local.tag}-${var.region}"
+  snapshot_name      = "clever-vpn-server-${local.tag}"
 }
 
 source "digitalocean" "clever-vpn" {
