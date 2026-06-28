@@ -7,31 +7,21 @@ on:
         description: 'Version tag (e.g. v2.1.6 or 2.1.6)'
         required: true
         type: string
-      region:
-        description: 'DigitalOcean region'
-        required: false
-        type: choice
-        default: 'nyc3'
-        options:
-          - nyc1
-          - nyc3
-          - sfo3
-          - ams3
-          - sgp1
-          - lon1
-          - fra1
-          - tor1
-          - blr1
-          - syd1
 
 permissions:
   contents: read
 
 jobs:
   build-snapshot:
-    name: Build DO Snapshot - ${{ inputs.version }}
+    name: Build (${{ matrix.region }}) - ${{ inputs.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        region:
+          - sgp1
+          - sfo3
 
     steps:
       - name: Checkout
@@ -81,10 +71,11 @@ jobs:
 
       - name: Validate Packer template
         working-directory: packer
-        run: packer validate -var "do_token=$DO_TOKEN" -var "version=$VERSION" clever-vpn-server.pkr.hcl
+        run: packer validate -var "do_token=$DO_TOKEN" -var "version=$VERSION" --var "region=$REGION" clever-vpn-server.pkr.hcl
         env:
           DO_TOKEN: ${{ env.DIGITALOCEAN_TOKEN }}
           VERSION: ${{ steps.version.outputs.tag }}
+          REGION: ${{ matrix.region }}
 
       - name: Build snapshot
         working-directory: packer
@@ -97,7 +88,7 @@ jobs:
         env:
           DO_TOKEN: ${{ env.DIGITALOCEAN_TOKEN }}
           VERSION: ${{ steps.version.outputs.tag }}
-          REGION: ${{ inputs.region }}
+          REGION: ${{ matrix.region }}
 
       # ── Summary ────────────────────────────────────────────
       - name: Summary
@@ -107,6 +98,6 @@ jobs:
             echo "### DigitalOcean Snapshot Build Complete"
             echo ""
             echo "- **Version**: ${{ steps.version.outputs.tag }}"
-            echo "- **Region**: ${{ inputs.region }}"
-            echo "- **Snapshot name**: \`clever-vpn-server-${{ steps.version.outputs.tag }}\`"
+            echo "- **Region**: ${{ matrix.region }}"
+            echo "- **Snapshot name**: \`clever-vpn-server-${{ steps.version.outputs.tag }}-${{ matrix.region }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
