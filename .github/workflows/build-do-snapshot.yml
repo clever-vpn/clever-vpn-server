@@ -1,0 +1,81 @@
+name: Build DigitalOcean Snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v2.1.6 or 2.1.6)'
+        required: true
+        type: string
+      region:
+        description: 'DigitalOcean region'
+        required: false
+        type: choice
+        default: 'nyc3'
+        options:
+          - nyc1
+          - nyc3
+          - sfo3
+          - ams3
+          - sgp1
+          - lon1
+          - fra1
+          - tor1
+          - blr1
+          - syd1
+
+jobs:
+  build-snapshot:
+    name: Build DO Snapshot - ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Normalize version
+        id: version
+        run: |
+          RAW="${{ inputs.version }}"
+          # Strip leading 'v' if present
+          CLEAN="${RAW#v}"
+          echo "tag=v${CLEAN}" >> "$GITHUB_OUTPUT"
+          echo "clean=$CLEAN" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Packer
+        uses: hashicorp/setup-packer@v3
+        with:
+          version: latest
+
+      - name: Initialize Packer
+        working-directory: packer
+        run: packer init clever-vpn-server.pkr.hcl
+
+      - name: Validate Packer template
+        working-directory: packer
+        run: packer validate -var "do_token=$DO_TOKEN" -var "version=$VERSION" clever-vpn-server.pkr.hcl
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          VERSION: ${{ steps.version.outputs.tag }}
+
+      - name: Build snapshot
+        working-directory: packer
+        run: |
+          packer build \
+            -var "do_token=$DO_TOKEN" \
+            -var "version=$VERSION" \
+            -var "region=$REGION" \
+            clever-vpn-server.pkr.hcl
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          VERSION: ${{ steps.version.outputs.tag }}
+          REGION: ${{ inputs.region }}
+
+      - name: Summary
+        run: |
+          echo "### DigitalOcean Snapshot Build Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version**: ${{ steps.version.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Region**: ${{ inputs.region }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Snapshot name**: \`clever-vpn-server-${{ steps.version.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
