@@ -34,6 +34,8 @@ locals {
   # Normalize version: accept both "v2.1.6" and "2.1.6"
   normalized_version = trimprefix(var.version, "v")
   tag                = "v${local.normalized_version}"
+  # DO tags cannot contain dots — replace with dashes
+  tag_safe           = replace(local.tag, ".", "-")
   snapshot_name      = "clever-vpn-server-${local.tag}"
 }
 
@@ -49,7 +51,7 @@ source "digitalocean" "clever-vpn" {
   tags = [
     "clever-vpn",
     "clever-vpn-server",
-    "version-${local.tag}",
+    "version-${local.tag_safe}",
     "kubernetes-1-click"
   ]
 }
