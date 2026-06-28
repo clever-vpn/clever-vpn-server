@@ -27,7 +27,7 @@ variable "region" {
 variable "droplet_size" {
   type        = string
   description = "Droplet size for build"
-  default     = "s-2vcpu-4gb"
+  default     = "s-1vcpu-1gb"
 }
 
 locals {
@@ -36,7 +36,7 @@ locals {
   tag                = "v${local.normalized_version}"
   # DO tags cannot contain dots — replace with dashes
   tag_safe           = replace(local.tag, ".", "-")
-  snapshot_name      = "clever-vpn-server-${local.tag}"
+  snapshot_name      = "clever-vpn-server-${local.tag}-${var.region}"
 }
 
 source "digitalocean" "clever-vpn" {
