@@ -32,7 +32,7 @@ variable "droplet_size" {
 
 locals {
   # Normalize version: accept both "v2.1.6" and "2.1.6"
-  normalized_version = replace(var.version, "/^v/", "")
+  normalized_version = trimprefix(var.version, "v")
   tag                = "v${local.normalized_version}"
   snapshot_name      = "clever-vpn-server-${local.tag}"
 }
