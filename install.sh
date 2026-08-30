@@ -46,7 +46,7 @@ check_environment() {
 
     echo "=== Checking environment requirements ==="
 
-    echo -n "[1/5] Checking Linux OS... "
+    echo -n "[1/4] Checking Linux OS... "
     if [[ "$(uname -s)" == "Linux" ]]; then
         echo "OK ($(uname -s))"
     else
@@ -55,7 +55,7 @@ check_environment() {
         errors=$((errors + 1))
     fi
 
-    echo -n "[2/5] Checking systemd... "
+    echo -n "[2/4] Checking systemd... "
     if [[ -d /run/systemd/system ]] || pidof systemd &>/dev/null; then
         echo "OK"
     else
@@ -64,17 +64,7 @@ check_environment() {
         errors=$((errors + 1))
     fi
 
-    echo -n "[3/5] Checking nftables... "
-    if command -v nft &>/dev/null; then
-        echo "OK ($(nft --version 2>/dev/null | head -1 || echo 'installed'))"
-    else
-        echo "FAILED"
-        echo "       ERROR: nftables (nft) is required but not found."
-        echo "       Install it with: apt-get install nftables  or  yum install nftables"
-        errors=$((errors + 1))
-    fi
-
-    echo -n "[4/5] Checking eBPF (BTF)... "
+    echo -n "[3/4] Checking eBPF (BTF)... "
     if [[ -f /sys/kernel/btf/vmlinux ]]; then
         echo "OK"
     else
@@ -84,7 +74,7 @@ check_environment() {
         errors=$((errors + 1))
     fi
 
-    echo -n "[5/5] Checking WireGuard kernel module... "
+    echo -n "[4/4] Checking WireGuard kernel module... "
     if [[ -d /sys/module/wireguard ]] || modprobe wireguard 2>/dev/null; then
         echo "OK"
     else
