@@ -164,7 +164,14 @@ download_file() {
 
 # ———————— 环境检查 ————————
 check_environment() {
-    local errors=0
+    local errors=0 skipped=0 ci_mode=0
+
+    # CI 模式（如 GitHub runner）无法满足硬件相关前置条件：runner 上 modprobe 以非 root
+    # 执行必然失败，BTF 也可能缺失。这两项降级为 SKIPPED，让测试能跑到下载/校验逻辑；
+    # 真实机器上不受影响，依旧强制检查。
+    if [[ "${CI:-}" == "true" ]]; then
+        ci_mode=1
+    fi
 
     echo "=== Checking environment requirements ==="
 
@@ -187,7 +194,10 @@ check_environment() {
     fi
 
     echo -n "[3/5] Checking eBPF (BTF)... "
-    if [[ -f /sys/kernel/btf/vmlinux ]]; then
+    if [[ $ci_mode -eq 1 ]]; then
+        echo "SKIPPED (CI)"
+        skipped=$((skipped + 1))
+    elif [[ -f /sys/kernel/btf/vmlinux ]]; then
         echo "OK"
     else
         echo "FAILED"
@@ -197,7 +207,10 @@ check_environment() {
     fi
 
     echo -n "[4/5] Checking WireGuard kernel module... "
-    if [[ -d /sys/module/wireguard ]] || modprobe wireguard 2>/dev/null; then
+    if [[ $ci_mode -eq 1 ]]; then
+        echo "SKIPPED (CI)"
+        skipped=$((skipped + 1))
+    elif [[ -d /sys/module/wireguard ]] || modprobe wireguard 2>/dev/null; then
         echo "OK"
     else
         echo "FAILED"
@@ -230,7 +243,11 @@ check_environment() {
         exit 1
     fi
 
-    echo "All environment checks passed."
+    if [[ $skipped -gt 0 ]]; then
+        echo "All environment checks passed ($skipped hardware check(s) skipped in CI)."
+    else
+        echo "All environment checks passed."
+    fi
     echo ""
 }
 
