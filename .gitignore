@@ -1,1 +1,7 @@
 test
+
+# Packer
+packer/manifest.json
+packer/output*/
+packer/*.log
+*.pkr.hcl.bak
