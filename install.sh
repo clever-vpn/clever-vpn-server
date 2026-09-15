@@ -61,7 +61,10 @@ ARCH=$(detect_arch)
 # 只有真正需要下载时才由 require_downloader 给出明确、可操作的错误。
 DOWNLOADER=""
 MIN_ARTIFACT_BYTES=1000000  # 发布包约 10MB，用它挡住错误页/空响应
-MAX_DOWNLOAD_ATTEMPTS=4
+MAX_DOWNLOAD_ATTEMPTS=3     # 尝试次数上限（含首次）
+DOWNLOAD_MAX_TIME=180       # 单次尝试超时（秒）：10.6MB 需 ~60KB/s，有效网络绰绰有余
+DOWNLOAD_RETRY_DELAY=3      # 重试间隔（秒）：内层只负责抗瞬时抖动
+DOWNLOAD_TOTAL_BUDGET=300   # 全部下载共享的总预算（秒）：到点即放弃，交给外层重试
 
 detect_downloader() {
     if command -v curl &>/dev/null; then
@@ -87,23 +90,47 @@ EOF
 # 下载单个文件：失败自动重试，且整包重下（不做续传，避免 200/206 语义差异
 # 导致文件被静默损坏）。先写 <dest>.tmp，确认完整后才原子替换 <dest>，
 # 因此任何时刻都不会留下可被误当成完整文件的半截文件。
+#
+# 时间预算：内层只负责抗「瞬时抖动」（秒级），分钟级的「网络尚未就绪」交给外层重试。
+#   - 单次尝试最长 DOWNLOAD_MAX_TIME 秒，并受剩余总预算裁剪
+#   - 全部下载共享 DOWNLOAD_TOTAL_BUDGET 秒总预算，到点即放弃
+#   次数与预算取先到者：失败很快时能用满 MAX_DOWNLOAD_ATTEMPTS 次；
+#   单次就卡满超时的连接可能在预算耗尽时提前放弃（这类连接重试收益本就低）。
 download_file() {
     local url="$1" dest="$2" min_bytes="${3:-1}"
-    local attempt rc size
+    local attempt tries rc size remaining attempt_timeout elapsed
 
     require_downloader
 
+    # 首次调用时启动全局预算时钟（多个文件共享同一个预算）
+    if [[ -z "${DOWNLOAD_STARTED:-}" ]]; then
+        DOWNLOAD_STARTED=$SECONDS
+        DOWNLOAD_DEADLINE=$((SECONDS + DOWNLOAD_TOTAL_BUDGET))
+    fi
+
     for ((attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++)); do
+        remaining=$((DOWNLOAD_DEADLINE - SECONDS))
+        if [[ $remaining -le 0 ]]; then
+            echo "  download budget of ${DOWNLOAD_TOTAL_BUDGET}s exhausted" >&2
+            break
+        fi
+        # 取「剩余预算」与「单次上限」中的较小值，保证总耗时不会超出预算
+        if [[ $remaining -lt $DOWNLOAD_MAX_TIME ]]; then
+            attempt_timeout=$remaining
+        else
+            attempt_timeout=$DOWNLOAD_MAX_TIME
+        fi
+
         rm -f "${dest}.tmp"
         rc=0
 
         if [[ "$DOWNLOADER" == "curl" ]]; then
             # -f 必须保留：否则 4xx/5xx 会以退出码 0 把错误页写进文件
-            curl -fL --proto '=https' --connect-timeout 10 --max-time 600 \
+            curl -fL --proto '=https' --connect-timeout 10 --max-time "$attempt_timeout" \
                 -o "${dest}.tmp" "$url" || rc=$?
         else
             # 重试由本函数统一负责，故 --tries=1，让日志与退避可控
-            wget -q --tries=1 --timeout=600 --https-only \
+            wget -q --tries=1 --timeout="$attempt_timeout" --https-only \
                 -O "${dest}.tmp" "$url" || rc=$?
         fi
 
@@ -120,12 +147,18 @@ download_file() {
 
         rm -f "${dest}.tmp"
         if [[ $attempt -lt $MAX_DOWNLOAD_ATTEMPTS ]]; then
-            echo "  attempt $attempt/$MAX_DOWNLOAD_ATTEMPTS failed (exit=$rc, ${size} bytes); retrying in $((attempt * 5))s..." >&2
-            sleep $((attempt * 5))
+            echo "  attempt $attempt/$MAX_DOWNLOAD_ATTEMPTS failed (exit=$rc, ${size} bytes); retrying in ${DOWNLOAD_RETRY_DELAY}s..." >&2
+            sleep "$DOWNLOAD_RETRY_DELAY"
         fi
     done
 
-    echo "ERROR: download failed after $MAX_DOWNLOAD_ATTEMPTS attempts: $url" >&2
+    tries=$((attempt - 1))
+    elapsed=$((SECONDS - DOWNLOAD_STARTED))
+    if [[ $tries -eq 0 ]]; then
+        echo "ERROR: download budget (${DOWNLOAD_TOTAL_BUDGET}s) exhausted before trying: $url" >&2
+    else
+        echo "ERROR: download failed after ${tries} attempt(s), ${elapsed}s elapsed: $url" >&2
+    fi
     return 1
 }
 
