@@ -30,6 +30,8 @@ trap 'echo "ERROR: install.sh aborted at line $LINENO (exit code $?)" >&2' ERR
 
 OWNER="clever-vpn"
 REPO="clever-vpn-server"
+# 发布资产镜像（Cloudflare R2 + 自定义域），key 形状 = vpn-server/<TAG>/<asset>
+R2_BASE_URL="https://download.clever-vpn.org/vpn-server"
 
 usage() {
     cat >&2 <<'EOF'
@@ -165,9 +167,11 @@ EOF
 #   - 全部下载共享 DOWNLOAD_TOTAL_BUDGET 秒总预算，到点即放弃
 #   次数与预算取先到者：失败很快时能用满 MAX_DOWNLOAD_ATTEMPTS 次；
 #   单次就卡满超时的连接可能在预算耗尽时提前放弃（这类连接重试收益本就低）。
+#
+# 返回：0 = 成功；2 = 该源上没有这份文件（换源即可，重试无意义）；1 = 其它失败
 download_file() {
     local url="$1" dest="$2" min_bytes="${3:-1}"
-    local attempt tries rc size remaining attempt_timeout elapsed
+    local attempt tries rc size remaining attempt_timeout elapsed http_code ok
 
     require_downloader
 
@@ -192,11 +196,14 @@ download_file() {
 
         rm -f "${dest}.tmp"
         rc=0
+        http_code=""
 
         if [[ "$DOWNLOADER" == "curl" ]]; then
-            # -f 必须保留：否则 4xx/5xx 会以退出码 0 把错误页写进文件
-            curl -fL --proto '=https' --connect-timeout 10 --max-time "$attempt_timeout" \
-                -o "${dest}.tmp" "$url" || rc=$?
+            # 这里刻意**不用 -f**：要把「这个源上没有这份文件」(403/404/410) 与
+            # 「传输失败」(超时/5xx) 区分开 —— 前者重试同一个源毫无意义，应当立刻换源。
+            # 代价是 4xx/5xx 的响应体会落进 .tmp，所以下面显式要求 HTTP 200。
+            http_code=$(curl -sS -L --proto '=https' --connect-timeout 10 \
+                --max-time "$attempt_timeout" -o "${dest}.tmp" -w '%{http_code}' "$url") || rc=$?
         else
             # 重试由本函数统一负责，故 --tries=1，让日志与退避可控
             wget -q --tries=1 --timeout="$attempt_timeout" --https-only \
@@ -209,12 +216,32 @@ download_file() {
             size=0
         fi
 
-        if [[ "$rc" -eq 0 && "$size" -ge "$min_bytes" ]]; then
+        ok=0
+        if [[ "$DOWNLOADER" == "curl" ]]; then
+            if [[ "$rc" -eq 0 && "$http_code" == "200" && "$size" -ge "$min_bytes" ]]; then
+                ok=1
+            fi
+        else
+            if [[ "$rc" -eq 0 && "$size" -ge "$min_bytes" ]]; then
+                ok=1
+            fi
+        fi
+
+        if [[ $ok -eq 1 ]]; then
             mv -f "${dest}.tmp" "$dest"
             return 0
         fi
 
         rm -f "${dest}.tmp"
+
+        # 「源上明确没有这份文件」⇒ 立刻返回 2，让调用方换源（而不是白重试 3 次）
+        case "$http_code" in
+            403|404|410)
+                echo "  HTTP $http_code: $url is not available on this source" >&2
+                return 2
+                ;;
+        esac
+
         if [[ $attempt -lt $MAX_DOWNLOAD_ATTEMPTS ]]; then
             echo "  attempt $attempt/$MAX_DOWNLOAD_ATTEMPTS failed (exit=$rc, ${size} bytes); retrying in ${DOWNLOAD_RETRY_DELAY}s..." >&2
             sleep "$DOWNLOAD_RETRY_DELAY"
@@ -323,15 +350,24 @@ check_environment() {
 check_environment
 
 # ———————— 产物就位与校验 ————————
-# 两种来源（联网下载 / 本地文件）之后的所有步骤完全一致：旁路只替换“取文件”这一步。
-BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
 GZ="${APP}-${ARCH}-${TAG}.gz"
 SHA_FILE="${APP}-${ARCH}-${TAG}.sha256"
 
-# stage_artifacts：把 .gz / .sha256 放到位（统一复制到 CWD，命名与下载路径一致）。
-# 刻意复制而不是直接使用 --local-file 指向的文件：cleanup trap 会删掉 CWD 里的中间产物，
-# 直接引用用户文件会导致把用户自己的文件删掉。
-stage_artifacts() {
+# 候选下载源，按优先级排列（"标签|基址"）；实际 URL = <基址>/<TAG>/<asset>。
+# 两处的 URL 形状**同构**，所以换源只是换一个基址。
+#   ① R2 镜像在前：主源，正是为了摆脱 GitHub 那个 CDN 的抖动；
+#   ② GitHub 必须留在列表里 —— v2.0.1 起所有已部署的二进制都只认公开仓
+#      releases/download 的形状（不可变的对外契约）。
+SOURCES=(
+    "R2|${R2_BASE_URL}"
+    "GitHub|https://github.com/$OWNER/$REPO/releases/download"
+)
+
+# prepare_artifact：把待安装的二进制就位（产出可执行的 ./$APP）。返回 0 = 就绪。
+#   - 带 --local-file：用本地已备好的产物（gzip → 校验 → 解压，与联网路径同一条路）
+#   - 否则：按 SOURCES 逐个源「取包 + 校验」，**任一源完整通过即止**；
+#     取包失败或校验失败都换下一个源 —— 镜像抖动、半截对象都能自动落到 GitHub。
+prepare_artifact() {
     if [[ -n "$LOCAL_FILE" ]]; then
         local base sibling_sha
         base="$(basename -- "$LOCAL_FILE")"
@@ -348,24 +384,54 @@ stage_artifacts() {
         else
             echo "WARNING: no $sibling_sha next to the local artifact - checksum verification will be skipped." >&2
         fi
-        return 0
+
+        if verify_and_extract; then
+            return 0
+        fi
+        return 1
     fi
 
-    echo "Downloading $GZ (arch: $ARCH)..."
-    download_file "$BASE_URL/$GZ" "$GZ" "$MIN_ARTIFACT_BYTES"
+    local entry label base rc
+    for entry in "${SOURCES[@]}"; do
+        label="${entry%%|*}"
+        base="${entry#*|}"
 
-    echo "Downloading $SHA_FILE..."
-    download_file "$BASE_URL/$SHA_FILE" "$SHA_FILE" 64
+        echo "Fetching $GZ (arch: $ARCH) from $label..."
+        rc=0
+        download_file "$base/$GZ" "$GZ" "$MIN_ARTIFACT_BYTES" || rc=$?
+        if [[ $rc -eq 0 ]]; then
+            echo "Fetching $SHA_FILE from $label..."
+            download_file "$base/$SHA_FILE" "$SHA_FILE" 64 || rc=$?
+        fi
+
+        if [[ $rc -ne 0 ]]; then
+            if [[ $rc -eq 2 ]]; then
+                echo "WARNING: $label has no $TAG assets; trying the next source." >&2
+            else
+                echo "WARNING: $label download failed (rc=$rc); trying the next source." >&2
+            fi
+            continue
+        fi
+
+        if verify_and_extract; then
+            return 0
+        fi
+        echo "WARNING: $label artifact failed verification; trying the next source." >&2
+    done
+
+    echo "ERROR: all ${#SOURCES[@]} download sources failed for $TAG" >&2
+    return 1
 }
 
-# verify_and_extract：格式预检 → gzip -t → 解压改名 → sha256 校验，产出可执行的 ./$APP
+# verify_and_extract：格式预检 → gzip -t → 解压改名 → sha256 校验，产出可执行的 ./$APP。
+# 返回 0 = 通过；非 0 = 这个源的产物不可用（由调用方决定换源还是报错）。
 verify_and_extract() {
     if [[ -f "$SHA_FILE" ]]; then
         # 校验文件自检：截断或错误页会让 sha256sum 报出难以理解的格式错误，这里提前拦下
         if ! grep -Eq '^[0-9a-f]{64} +[^ ]+$' "$SHA_FILE"; then
             echo "ERROR: malformed checksum file ($SHA_FILE), expected '<64-hex-digest>  <filename>'." >&2
             echo "       The download was most likely truncated - please re-run the installer." >&2
-            exit 1
+            return 1
         fi
     fi
 
@@ -374,7 +440,7 @@ verify_and_extract() {
     if ! gzip -t "$GZ"; then
         echo "ERROR: $GZ is truncated or corrupted (gzip integrity test failed)." >&2
         echo "       The download was most likely cut short - please re-run the installer." >&2
-        exit 1
+        return 1
     fi
 
     echo "Decompressing $GZ..."
@@ -388,7 +454,10 @@ verify_and_extract() {
 
     if [[ -f "$SHA_FILE" ]]; then
         echo "Verifying checksum..."
-        sha256sum --check "$SHA_FILE"
+        if ! sha256sum --check "$SHA_FILE"; then
+            echo "ERROR: checksum verification failed for $SHA_FILE." >&2
+            return 1
+        fi
         echo "Checksum verified successfully."
     else
         echo "WARNING: checksum file unavailable - integrity NOT verified." >&2
@@ -413,8 +482,7 @@ if command -v "$APPCMD" &>/dev/null; then
         # 本地旁路：原地替换二进制并重启，等价于 `update`，但不下载。
         # 刻意不走 uninstall：uninstall 会删掉 /etc/clever-vpn-server/，
         # 而平台写入的 wsUrl / token 配置就在那里 —— 那会让这台机器再也连不上平台。
-        stage_artifacts
-        verify_and_extract
+        prepare_artifact
 
         TARGET="$(readlink -f "$(command -v "$APPCMD")")"
         if [[ -z "$TARGET" || ! -f "$TARGET" ]]; then
@@ -443,8 +511,7 @@ fi
 # ———————— 未安装：完整安装流程 ————————
 echo "clever-vpn is not installed. Proceeding with fresh installation..."
 
-stage_artifacts
-verify_and_extract
+prepare_artifact
 
 echo "Installing new version..."
 

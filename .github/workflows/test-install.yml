@@ -30,6 +30,9 @@ env:
   INSTALL_URL: https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh
   # 发布资产基址（= 老机器的升级源，形状不允许变）
   ASSET_BASE: https://github.com/clever-vpn/clever-vpn-server/releases/download
+  # 发布资产镜像（主源）；key 形状 = <R2_PREFIX>/<TAG>/<asset>
+  R2_PUBLIC_BASE: https://download.clever-vpn.org
+  R2_PREFIX: vpn-server
 
 jobs:
   contract:
@@ -67,6 +70,54 @@ jobs:
             exit 1
           fi
           echo "OK: $(cat /tmp/checksum.sha256)"
+
+  # R2 镜像：主源必须真的可用、且与 GitHub 同物。
+  # 没有这一步，「主源切到 R2」在 CI 里是完全不可见的 —— install.sh 会静默回退到 GitHub，
+  # 测试照样绿，而 R2 可能根本没被回填。
+  r2-mirror:
+    name: R2 mirror serves the same bytes
+    needs: contract
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: R2 has the same assets as GitHub
+        run: |
+          set -euo pipefail
+          gh_base="$ASSET_BASE/$TAG"
+          r2_base="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG"
+          fail=0
+
+          for arch in 386 amd64 arm arm64; do
+            # .gz：只要可达（字节级比对在 push-to-r2.yml 上传时已做过，
+            #     这里不值得每次都拉 4×10MB）
+            url="$r2_base/clever-vpn-server-${arch}-${TAG}.gz"
+            code=$(curl -sSL -I -o /dev/null -w '%{http_code}' "$url")
+            echo "r2 ${arch}.gz -> ${code}"
+            if [ "$code" != "200" ]; then
+              echo "::error::R2 is missing $url（主源未回填，install.sh 只能静默回退到 GitHub）"
+              fail=1
+            fi
+
+            # .sha256：内容小，直接逐字节比对 —— 它装的是**解压后二进制**的摘要，
+            #          两边内容一致即证明两边发布的是同一个编译产物
+            f="clever-vpn-server-${arch}-${TAG}.sha256"
+            curl -fsSL "$gh_base/$f" -o "/tmp/gh-$f"
+            if ! curl -fsSL "$r2_base/$f" -o "/tmp/r2-$f"; then
+              echo "::error::R2 is missing $r2_base/$f（主源未回填）"
+              fail=1
+              continue
+            fi
+            if ! cmp -s "/tmp/gh-$f" "/tmp/r2-$f"; then
+              echo "::error::R2 checksum file differs from GitHub: $f"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+          echo "OK: R2 mirror matches GitHub for $TAG"
 
   install:
     name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
