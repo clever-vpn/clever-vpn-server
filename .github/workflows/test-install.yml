@@ -130,10 +130,42 @@ jobs:
 
           if [ "$blocked" -ne 0 ]; then
             echo "::warning::CI runner 取不到公开域名（边缘策略拦截）。这不代表线上有问题："
-            echo "::warning::真实 VPS 实测 200。权威校验见私有仓 push-to-r2.yml 的桶内比对。"
+            echo "::warning::真实 VPS 实测 200。镜像的写入由私有仓 release.yml 的 mirror-r2 job /"
+            echo "::warning::backfill-r2.yml 负责（wrangler 上传失败会非零退出）。"
             exit 0
           fi
           echo "OK: R2 public edge serves the same assets as GitHub for $TAG"
+
+      # 【临时诊断】弄清楚"为什么 CI runner 取不到公开域名"。结论确定后本步骤可以删。
+      - name: Diagnose the 403
+        run: |
+          set -uo pipefail
+          url="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG/clever-vpn-server-amd64-${TAG}.gz"
+
+          echo "=== runner 出口 IP / colo（Cloudflare trace）==="
+          curl -sS -m 20 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|colo|loc|http|warp)=' || true
+
+          echo
+          echo "=== 目标 URL：默认 UA（状态 + 响应头 + 响应体）==="
+          curl -sS -D /tmp/h1 -o /tmp/b1 -m 30 -w 'code=%{http_code}\n' "$url" || true
+          grep -iE '^(HTTP/|cf-|server|content-type|location|retry-after)' /tmp/h1 | head -15 || true
+          echo "--- body (800B) ---"
+          head -c 800 /tmp/b1 2>/dev/null || true
+          echo
+
+          echo "=== 变量对比（只看状态码）==="
+          printf '%-28s %s\n' "浏览器 UA" \
+            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' "$url" || echo err)"
+          printf '%-28s %s\n' "空 UA" \
+            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' -A '' "$url" || echo err)"
+          printf '%-28s %s\n' "HTTP/1.1" \
+            "$(curl -sS -o /dev/null -m 30 --http1.1 -w '%{http_code}' "$url" || echo err)"
+          printf '%-28s %s\n' "https://www.cloudflare.com/" \
+            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' https://www.cloudflare.com/ || echo err)"
+          printf '%-28s %s\n' "GitHub 同一资产" \
+            "$(curl -sSL -o /dev/null -m 30 -w '%{http_code}' "$GH_ASSET_BASE/${TAG}/clever-vpn-server-amd64-${TAG}.gz" || echo err)"
+          printf '%-28s %s\n' "R2 public 域根路径" \
+            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' "$R2_PUBLIC_BASE/" || echo err)"
 
   install:
     name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
