@@ -1,17 +1,76 @@
 name: Test Install Script
 
+# 这个 workflow 断言的是**公开仓的对外契约**（资产命名、校验文件格式、脚本入口），
+# 所以它住在公开仓（= 文档 + 发布载体）。
+#
+# 定位：它是「发布产物契约测试」，不是「安装功能测试」—— CI=true 会跳过
+# BTF/WireGuard 检查与 `clever-vpn install`。所以它与手工 RC 验证互补、不重叠：
+#   - 这里（免费、发版即可跑）→ 下载/校验契约、四个架构齐全、生产调用形式能跑通
+#   - 手工 RC（真机）        → 二进制在真实内核上能否工作（BPF / WireGuard / systemd）
+#
+# 触发：
+#   ① 手工 workflow_dispatch（tag 必填 —— 刻意不给默认值，避免又拿旧版本跑一遍）
+#   ② 由私有仓 clever-vpn-server-src 的 release workflow 在发布后经 API 触发
+#      （POST /repos/clever-vpn/clever-vpn-server/actions/workflows/test-install.yml/dispatches，
+#      需要 PAT 具备 workflow scope）
+
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag to test (e.g. v2.1.0)'
+        description: 'Version tag to test (e.g. v2.1.11)'
         required: true
         type: string
-        default: 'v2.1.0'
+
+permissions:
+  contents: read
+
+env:
+  # 生产环境的脚本入口（与 cf-api 生成的安装命令一致）
+  INSTALL_URL: https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh
+  # 发布资产基址（= 老机器的升级源，形状不允许变）
+  ASSET_BASE: https://github.com/clever-vpn/clever-vpn-server/releases/download
 
 jobs:
-  test:
-    name: Test (${{ matrix.arch }}) - ${{ matrix.runner }}
+  contract:
+    name: Asset contract (all 4 arches)
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      # 矩阵只覆盖 amd64/arm64，这里补齐 arm/386 —— 少发一个架构的资产
+      # 真机 RC 是发现不了的（RC 用手工 scp 的本地文件，不碰下载）。
+      - name: All published assets exist
+        run: |
+          set -euo pipefail
+          base="$ASSET_BASE/$TAG"
+          missing=0
+          for arch in 386 amd64 arm arm64; do
+            for ext in gz sha256; do
+              url="$base/clever-vpn-server-${arch}-${TAG}.${ext}"
+              code=$(curl -sSL -I -o /dev/null -w '%{http_code}' "$url")
+              echo "${arch}.${ext} -> ${code}"
+              if [ "$code" != "200" ]; then
+                echo "::error::missing release asset: clever-vpn-server-${arch}-${TAG}.${ext}"
+                missing=1
+              fi
+            done
+          done
+          [ "$missing" -eq 0 ]
+
+      - name: Checksum file is well-formed
+        run: |
+          set -euo pipefail
+          curl -fsSL "$ASSET_BASE/$TAG/clever-vpn-server-amd64-${TAG}.sha256" -o /tmp/checksum.sha256
+          if ! grep -Eq '^[0-9a-f]{64} +[^ ]+$' /tmp/checksum.sha256; then
+            echo "::error::malformed checksum file: $(cat /tmp/checksum.sha256)"
+            exit 1
+          fi
+          echo "OK: $(cat /tmp/checksum.sha256)"
+
+  install:
+    name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
+    needs: contract
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -21,12 +80,27 @@ jobs:
             arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
-
+    env:
+      CI: 'true'
+      TAG: ${{ inputs.tag }}
     steps:
-      - name: Test install script
-        env:
-          CI: 'true'
+      - uses: actions/checkout@v4
+
+      # 生产的真实调用形式：@ 是 $0 占位符，TAG/TOKEN 才落在 $1/$2 上。
+      # 这条路径此前从未被任何测试走过。
+      - name: Deployed entry point (production invocation form)
         run: |
-          set -x
-          echo "Testing install.sh on arch: ${{ matrix.arch }} with tag: ${{ inputs.tag }}"
-          curl -sSL https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh | bash -s -- "${{ inputs.tag }}"
+          set -eux
+          bash -c "$(curl -fsSL "$INSTALL_URL")" @ "$TAG" "test-token-not-used"
+
+      # 本地旁路：不起下载，直接装本地 .gz（手工 RC 验证用的就是这条路径）
+      - name: Local artifact (--local-file)
+        run: |
+          set -eux
+          workdir="$(mktemp -d)"
+          cd "$workdir"
+          gz="clever-vpn-server-${{ matrix.arch }}-${TAG}.gz"
+          sha="clever-vpn-server-${{ matrix.arch }}-${TAG}.sha256"
+          curl -fsSL "$ASSET_BASE/$TAG/$gz"  -o "$gz"
+          curl -fsSL "$ASSET_BASE/$TAG/$sha" -o "$sha"
+          bash "$GITHUB_WORKSPACE/install.sh" "$TAG" --local-file "./$gz"

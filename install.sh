@@ -3,11 +3,14 @@ set -euo pipefail
 
 # ============================================================
 # clever-vpn-server 安装脚本
-# 用法: bash install.sh <TAG> [TOKEN]
+# 用法: bash install.sh <TAG> [TOKEN] [--local-file <PATH>]
 #   TAG   - 版本号，如 v2.1.0（必填）
 #   TOKEN - 激活令牌（可选，不提供则只安装不激活）
+#   --local-file - 用本地已备好的发布产物（.gz）替代下载；同目录存在同名
+#                  .sha256 时一并校验。用于手工验证与离线安装。
 #
-# 幂等设计：已安装时，有 TOKEN 则激活，无 TOKEN 则升级。
+# 幂等设计：已安装时，有 TOKEN 则激活，无 TOKEN 则升级；
+# 带 --local-file 时改为原地替换二进制并重启（不下载、不卸载）。
 # ============================================================
 
 # ———————— 失败诊断与清理 ————————
@@ -28,17 +31,83 @@ trap 'echo "ERROR: install.sh aborted at line $LINENO (exit code $?)" >&2' ERR
 OWNER="clever-vpn"
 REPO="clever-vpn-server"
 
+usage() {
+    cat >&2 <<'EOF'
+Usage: install.sh <TAG> [TOKEN] [--local-file <PATH>]
+  TAG   - version tag, e.g. v2.1.0 (required)
+  TOKEN - activation token (optional; without it the server is installed
+          but not activated)
+  --local-file <PATH> - install from a local release artifact instead of
+          downloading. PATH must be the released .gz
+          (e.g. clever-vpn-server-amd64-v2.1.11.gz); a sibling .sha256 is
+          verified when present.
+EOF
+}
+
+APP="clever-vpn-server"
+APPCMD="clever-vpn"
+LOCAL_FILE=""
+POSITIONAL=()
+
+# 位置参数保持 <TAG> [TOKEN] 不变 —— 生产环境的调用形式是
+# `bash -c "$(curl ...)" @ "<TAG>" "<TOKEN>"`（@ 是 $0 占位符），不能改。
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --local-file)
+            if [[ $# -lt 2 ]]; then
+                echo "ERROR: --local-file requires a path argument." >&2
+                usage
+                exit 1
+            fi
+            LOCAL_FILE="$2"
+            shift 2
+            ;;
+        --local-file=*)
+            LOCAL_FILE="${1#*=}"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            POSITIONAL+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ ${#POSITIONAL[@]} -gt 0 ]]; then
+    set -- "${POSITIONAL[@]}"
+else
+    set --
+fi
+
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <TAG> [TOKEN]"
-    echo "  TAG   - version tag, e.g. v2.1.0"
-    echo "  TOKEN - activation token (optional)"
+    usage
     exit 1
 fi
 
 TAG="$1"
 TOKEN="${2:-}"
-APP="clever-vpn-server"
-APPCMD="clever-vpn"
+
+# TAG 会被拼进下载 URL（引导层里它还是平台可配置的值），先做白名单。
+# 允许 v1.2.3 与 v1.2.3-rc.1 —— 后者用于手工验证 RC。
+if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+    echo "ERROR: invalid TAG '$TAG', expected v<major>.<minor>.<patch> (optionally -rc.<n>)." >&2
+    exit 1
+fi
+
+if [[ -n "$LOCAL_FILE" ]]; then
+    if [[ ! -f "$LOCAL_FILE" ]]; then
+        echo "ERROR: --local-file path not found: $LOCAL_FILE" >&2
+        exit 1
+    fi
+    if [[ "$LOCAL_FILE" != *.gz ]]; then
+        echo "ERROR: --local-file expects the release .gz artifact, got: $LOCAL_FILE" >&2
+        exit 1
+    fi
+fi
 
 # ———————— 探测系统架构 ————————
 detect_arch() {
@@ -253,6 +322,81 @@ check_environment() {
 
 check_environment
 
+# ———————— 产物就位与校验 ————————
+# 两种来源（联网下载 / 本地文件）之后的所有步骤完全一致：旁路只替换“取文件”这一步。
+BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
+GZ="${APP}-${ARCH}-${TAG}.gz"
+SHA_FILE="${APP}-${ARCH}-${TAG}.sha256"
+
+# stage_artifacts：把 .gz / .sha256 放到位（统一复制到 CWD，命名与下载路径一致）。
+# 刻意复制而不是直接使用 --local-file 指向的文件：cleanup trap 会删掉 CWD 里的中间产物，
+# 直接引用用户文件会导致把用户自己的文件删掉。
+stage_artifacts() {
+    if [[ -n "$LOCAL_FILE" ]]; then
+        local base sibling_sha
+        base="$(basename -- "$LOCAL_FILE")"
+        if [[ "$base" != "$GZ" ]]; then
+            echo "WARNING: local artifact is named '$base', expected '$GZ' (arch=$ARCH, tag=$TAG)." >&2
+            echo "         Continuing, but double-check its architecture and version." >&2
+        fi
+        echo "Using local artifact: $LOCAL_FILE"
+        cp -f -- "$LOCAL_FILE" "$GZ"
+
+        sibling_sha="${LOCAL_FILE%.gz}.sha256"
+        if [[ -f "$sibling_sha" ]]; then
+            cp -f -- "$sibling_sha" "$SHA_FILE"
+        else
+            echo "WARNING: no $sibling_sha next to the local artifact - checksum verification will be skipped." >&2
+        fi
+        return 0
+    fi
+
+    echo "Downloading $GZ (arch: $ARCH)..."
+    download_file "$BASE_URL/$GZ" "$GZ" "$MIN_ARTIFACT_BYTES"
+
+    echo "Downloading $SHA_FILE..."
+    download_file "$BASE_URL/$SHA_FILE" "$SHA_FILE" 64
+}
+
+# verify_and_extract：格式预检 → gzip -t → 解压改名 → sha256 校验，产出可执行的 ./$APP
+verify_and_extract() {
+    if [[ -f "$SHA_FILE" ]]; then
+        # 校验文件自检：截断或错误页会让 sha256sum 报出难以理解的格式错误，这里提前拦下
+        if ! grep -Eq '^[0-9a-f]{64} +[^ ]+$' "$SHA_FILE"; then
+            echo "ERROR: malformed checksum file ($SHA_FILE), expected '<64-hex-digest>  <filename>'." >&2
+            echo "       The download was most likely truncated - please re-run the installer." >&2
+            exit 1
+        fi
+    fi
+
+    # 解压前先做完整性测试：截断的归档在这里就会被抓住，且不会留下半截二进制
+    echo "Testing archive integrity..."
+    if ! gzip -t "$GZ"; then
+        echo "ERROR: $GZ is truncated or corrupted (gzip integrity test failed)." >&2
+        echo "       The download was most likely cut short - please re-run the installer." >&2
+        exit 1
+    fi
+
+    echo "Decompressing $GZ..."
+    gunzip -f "$GZ"
+
+    # 解压后文件名与 sha256 文件中引用的名称可能不一致，统一重命名
+    DECOMPRESSED="${GZ%.gz}"
+    if [[ "$DECOMPRESSED" != "$APP" ]]; then
+        mv -f "$DECOMPRESSED" "$APP"
+    fi
+
+    if [[ -f "$SHA_FILE" ]]; then
+        echo "Verifying checksum..."
+        sha256sum --check "$SHA_FILE"
+        echo "Checksum verified successfully."
+    else
+        echo "WARNING: checksum file unavailable - integrity NOT verified." >&2
+    fi
+
+    chmod +x "$APP"
+}
+
 # ———————— 已安装：幂等处理 ————————
 if command -v "$APPCMD" &>/dev/null; then
     echo "clever-vpn is already installed."
@@ -264,10 +408,34 @@ if command -v "$APPCMD" &>/dev/null; then
         echo "Activation completed successfully!"
     fi
 
-    # 步骤 2：升级到指定版本（同版本自动跳过）
-    echo "Upgrading to version $TAG..."
-    "$APPCMD" update -tag="$TAG"
-    echo "Update completed successfully!"
+    # 步骤 2：替换二进制
+    if [[ -n "$LOCAL_FILE" ]]; then
+        # 本地旁路：原地替换二进制并重启，等价于 `update`，但不下载。
+        # 刻意不走 uninstall：uninstall 会删掉 /etc/clever-vpn-server/，
+        # 而平台写入的 wsUrl / token 配置就在那里 —— 那会让这台机器再也连不上平台。
+        stage_artifacts
+        verify_and_extract
+
+        TARGET="$(readlink -f "$(command -v "$APPCMD")")"
+        if [[ -z "$TARGET" || ! -f "$TARGET" ]]; then
+            echo "ERROR: cannot resolve the installed binary path from '$APPCMD'." >&2
+            exit 1
+        fi
+
+        echo "Replacing $TARGET ..."
+        "$APPCMD" stop
+        cp -f "$APP" "${TARGET}.new"
+        chmod +x "${TARGET}.new"
+        # 同目录 rename：原子替换
+        mv -f "${TARGET}.new" "$TARGET"
+        "$APPCMD" start
+        echo "Replaced with the local artifact ($TAG) and restarted."
+    else
+        # 升级到指定版本（同版本自动跳过，由 Go 侧判断）
+        echo "Upgrading to version $TAG..."
+        "$APPCMD" update -tag="$TAG"
+        echo "Update completed successfully!"
+    fi
 
     exit 0
 fi
@@ -275,46 +443,10 @@ fi
 # ———————— 未安装：完整安装流程 ————————
 echo "clever-vpn is not installed. Proceeding with fresh installation..."
 
-BASE_URL="https://github.com/$OWNER/$REPO/releases/download/$TAG"
-GZ="${APP}-${ARCH}-${TAG}.gz"
-SHA_FILE="${APP}-${ARCH}-${TAG}.sha256"
-
-echo "Downloading $GZ (arch: $ARCH)..."
-download_file "$BASE_URL/$GZ" "$GZ" "$MIN_ARTIFACT_BYTES"
-
-echo "Downloading $SHA_FILE..."
-download_file "$BASE_URL/$SHA_FILE" "$SHA_FILE" 64
-
-# 校验文件自检：截断或错误页会让 sha256sum 报出难以理解的格式错误，这里提前拦下
-if ! grep -Eq '^[0-9a-f]{64} +[^ ]+$' "$SHA_FILE"; then
-    echo "ERROR: malformed checksum file ($SHA_FILE), expected '<64-hex-digest>  <filename>'." >&2
-    echo "       The download was most likely truncated - please re-run the installer." >&2
-    exit 1
-fi
-
-# 解压前先做完整性测试：截断的归档在这里就会被抓住，且不会留下半截二进制
-echo "Testing archive integrity..."
-if ! gzip -t "$GZ"; then
-    echo "ERROR: $GZ is truncated or corrupted (gzip integrity test failed)." >&2
-    echo "       The download was most likely cut short - please re-run the installer." >&2
-    exit 1
-fi
-
-echo "Decompressing $GZ..."
-gunzip -f "$GZ"
-
-# 解压后文件名与 sha256 文件中引用的名称可能不一致，统一重命名
-DECOMPRESSED="${GZ%.gz}"
-if [[ "$DECOMPRESSED" != "$APP" ]]; then
-    mv -f "$DECOMPRESSED" "$APP"
-fi
-
-echo "Verifying checksum..."
-sha256sum --check "$SHA_FILE"
-echo "Checksum verified successfully."
+stage_artifacts
+verify_and_extract
 
 echo "Installing new version..."
-chmod +x "$APP"
 
 if [[ "${CI:-}" == "true" ]]; then
     echo "CI environment detected, skipping service installation."
