@@ -59,17 +59,16 @@ source "digitalocean" "clever-vpn" {
 build {
   sources = ["source.digitalocean.clever-vpn"]
 
-  # 取该版本的 install.sh 并运行。脚本随发布走（与二进制同一次发布）：
-  #   R2 主源  https://download.clever-vpn.org/vpn-server/<TAG>/install.sh
-  #   GitHub  https://github.com/clever-vpn/clever-vpn-server/releases/download/<TAG>/install.sh
-  # 刻意不再上传仓库里那份 —— 那份现在只是给老 URL 用的兼容壳。
-  # 保留兜底：构建机的出口 IP 可能被公开域名的边缘策略挡（CI runner 就是这个原因）。
-  # 无 token —— 这里只做 base snapshot（不含激活信息）。
+  # Upload the repo's own install.sh to the Droplet
+  provisioner "file" {
+    source      = "${path.root}/../install.sh"
+    destination = "/tmp/install.sh"
+  }
+
+  # Run install.sh with the version tag (no token — base snapshot only)
   provisioner "shell" {
     inline = [
-      "set -e",
-      "curl -fsSL --connect-timeout 10 --max-time 60 https://download.clever-vpn.org/vpn-server/${local.tag}/install.sh -o /tmp/install.sh || curl -fsSL --connect-timeout 10 --max-time 60 https://github.com/clever-vpn/clever-vpn-server/releases/download/${local.tag}/install.sh -o /tmp/install.sh",
-      "bash -n /tmp/install.sh",
+      "chmod +x /tmp/install.sh",
       "bash /tmp/install.sh ${local.tag}",
       "rm -f /tmp/install.sh",
     ]

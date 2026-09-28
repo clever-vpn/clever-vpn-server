@@ -29,7 +29,7 @@ env:
   # 发布资产基址（GitHub releases = 老机器的升级源，形状不允许变）
   ASSET_BASE: https://github.com/clever-vpn/clever-vpn-server/releases/download
   # 发布资产镜像（主源）；key 形状 = <R2_PREFIX>/<TAG>/<asset>
-  # 生产的引导层就是它：<R2_PUBLIC_BASE>/<R2_PREFIX>/<TAG>/install.sh（与 cf-api 一致）
+  # 升级 cf-api 之后，生产安装命令的引导层就是 <R2_PUBLIC_BASE>/<R2_PREFIX>/<TAG>/install.sh
   R2_PUBLIC_BASE: https://download.clever-vpn.org
   R2_PREFIX: vpn-server
 
@@ -81,12 +81,15 @@ jobs:
               fi
             done
           done
-          if probe "$base/install.sh"; then
-            echo "OK   install.sh"
-          else
-            echo "::error::missing release asset: install.sh"
-            missing=1
-          fi
+          # 引导脚本与 bash 补全也是发布资产（与二进制同一次发布）
+          for f in install.sh clever-vpn.bash-completion; do
+            if probe "$base/$f"; then
+              echo "OK   $f"
+            else
+              echo "::error::missing release asset: $f"
+              missing=1
+            fi
+          done
           [ "$missing" -eq 0 ]
 
       - name: Checksum file is well-formed
@@ -99,20 +102,26 @@ jobs:
           fi
           echo "OK: $(cat /tmp/checksum.sha256)"
 
-      # 引导脚本（install.sh）现在也是发布资产，而它是安装命令的**第一步**
-      # —— 它缺了就整条命令失败。所以它是契约：不多不少，得能跑、得是真脚本。
-      - name: install.sh is published and is the real one
+      # 引导脚本（install.sh）与补全脚本也是发布资产，而引导脚本是安装命令的
+      # **第一步** —— 它缺了就整条命令失败。所以它们是契约：得能跑、得是新流程那份。
+      - name: install.sh and the bash completion are published and sane
         run: |
           set -euo pipefail
           curl -fsSL "$ASSET_BASE/$TAG/install.sh" -o /tmp/install.sh
+          curl -fsSL "$ASSET_BASE/$TAG/clever-vpn.bash-completion" -o /tmp/completion
           bash -n /tmp/install.sh
+          bash -n /tmp/completion
           bytes=$(wc -c < /tmp/install.sh | tr -d '[:space:]')
-          echo "install.sh: ${bytes} bytes"
-          # 挡住空文件 / 错误页：真脚本 ~21KB
+          cbytes=$(wc -c < /tmp/completion | tr -d '[:space:]')
+          echo "install.sh: ${bytes} bytes / completion: ${cbytes} bytes"
+          # 挡住空文件 / 错误页：真脚本 ~21KB，补全 ~1KB
           [ "$bytes" -ge 8000 ] || { echo "::error::install.sh 太小（${bytes} bytes）—— 不像真脚本"; exit 1; }
-          # 契约标记（定义在真脚本头部）：区分真脚本与公开仓那层兼容壳 / 历史副本
+          [ "$cbytes" -ge 200 ] || { echo "::error::补全脚本太小（${cbytes} bytes）"; exit 1; }
+          # 契约标记（定义在新流程脚本头部）：区分它与历史副本 / 别的文件
+          # 公开仓那份 install.sh 是升级 cf-api 之前的旧流程入口 —— 它没有这个标记，
+          # 也不应该出现在发布资产里。
           grep -q 'CLEVER_VPN_REAL_INSTALLER=1' /tmp/install.sh \
-            || { echo "::error::发布出去的 install.sh 没有契约标记（是兼容壳或历史副本？）"; exit 1; }
+            || { echo "::error::发布出去的 install.sh 没有契约标记（是历史副本？）"; exit 1; }
           # R2 主源必须写在脚本里，否则镜像等于白做
           grep -q 'download.clever-vpn.org' /tmp/install.sh \
             || { echo "::error::install.sh 里没有 R2 主源"; exit 1; }
@@ -281,7 +290,7 @@ jobs:
           bash -c "$(curl -fsSL "$boot")" @ "$TAG" "test-token-not-used"
 
       # 本地旁路：不起下载，直接装本地 .gz（手工 RC 验证用的就是这条路径）。
-      # 用的是**发布出去的** install.sh，不是仓库里那份兼容壳。
+      # 用的是**发布出去的** install.sh（新流程那份），不是公开仓里的旧流程入口。
       - name: Local artifact (--local-file)
         run: |
           set -eux
