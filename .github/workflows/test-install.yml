@@ -136,55 +136,22 @@ jobs:
           fi
           echo "OK: R2 public edge serves the same assets as GitHub for $TAG"
 
-      # 【临时诊断】弄清楚"为什么 CI runner 取不到公开域名"。结论确定后本步骤可以删。
-      - name: Diagnose the 403
-        run: |
-          set -uo pipefail
-          url="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG/clever-vpn-server-amd64-${TAG}.gz"
-
-          echo "=== runner 出口 IP / colo（Cloudflare trace）==="
-          curl -sS -m 20 https://www.cloudflare.com/cdn-cgi/trace | grep -E '^(ip|colo|loc|http|warp)=' || true
-
-          echo
-          echo "=== 目标 URL：默认 UA（状态 + 响应头 + 响应体）==="
-          curl -sS -D /tmp/h1 -o /tmp/b1 -m 30 -w 'code=%{http_code}\n' "$url" || true
-          grep -iE '^(HTTP/|cf-|server|content-type|location|retry-after)' /tmp/h1 | head -15 || true
-          echo "--- body (800B) ---"
-          head -c 800 /tmp/b1 2>/dev/null || true
-          echo
-
-          echo "=== 变量对比（只看状态码）==="
-          printf '%-28s %s\n' "浏览器 UA" \
-            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' "$url" || echo err)"
-          printf '%-28s %s\n' "空 UA" \
-            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' -A '' "$url" || echo err)"
-          printf '%-28s %s\n' "HTTP/1.1" \
-            "$(curl -sS -o /dev/null -m 30 --http1.1 -w '%{http_code}' "$url" || echo err)"
-          printf '%-28s %s\n' "https://www.cloudflare.com/" \
-            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' https://www.cloudflare.com/ || echo err)"
-          printf '%-34s %s\n' "GitHub 同一资产" \
-            "$(curl -sSL -o /dev/null -m 30 -w '%{http_code}' "$ASSET_BASE/${TAG}/clever-vpn-server-amd64-${TAG}.gz" || echo err)"
-
-          echo
-          echo "=== TLS 握手（验证「是不是 min TLS 1.2 导致」）==="
-          # 若真是 TLS 协商问题，curl 会以 exit 35 / SSL_ERROR 失败且**拿不到 HTTP 状态**；
-          # 而我们现在拿到的是完整 HTTP/2 403 + 挑战页 ⇒ 握手本身是通的。
-          # 这里再把协商到具体版本打出来，彻底排除。
-          for opt in "--tls-max 1.2" "--tlsv1.3" ""; do
-            info=$(curl -sS -v $opt -o /dev/null -m 30 "$url" 2>&1 | grep -iE 'SSL connection using' | head -1 || true)
-            code=$(curl -sS $opt -o /dev/null -m 30 -w '%{http_code}' "$url" 2>/dev/null || echo err)
-            printf '%-16s code=%-5s %s\n' "${opt:-(默认)}" "$code" "$info"
-          done
-
-          echo
-          echo "=== 同 zone 其它 hostname 对照（判定是 zone 级还是 hostname 级）==="
-          for h in "$R2_PUBLIC_BASE/" "$R2_PUBLIC_BASE/$R2_PREFIX/" \
-                   "https://www.clever-vpn.org/" "https://clever-vpn.org/"; do
-            out=$(curl -sS -o /dev/null -D - -m 30 -w ' code=%{http_code}' "$h" 2>/dev/null || true)
-            mit=$(printf '%s' "$out" | grep -i '^cf-mitigated:' | tr -d '\r' || true)
-            code=$(printf '%s' "$out" | grep -o 'code=[0-9]*' || true)
-            printf '%-34s %s %s\n' "$h" "$code" "${mit:-（无 cf-mitigated）}"
-          done
+      # —— 为什么"公网可达"只能作提示（2026-09-28 已查清，不必重新调查）——
+      #
+      # 现象：CI runner 取不到公开域名（403），而家宽 / **真实 VPS** 都是 200。
+      # 从 runner 上逐项排除得到：
+      #   · `cf-mitigated: challenge` + "Just a moment..." ⇒ 是 **Cloudflare 托管挑战**
+      #   · 换浏览器 UA / 空 UA / HTTP1.1 ⇒ 仍 403 ⇒ 与请求内容无关
+      #   · `--tls-max 1.2` 与 `--tlsv1.3` **都握手成功**（打印出协商到的版本）且同样 403
+      #     ⇒ **与该域自定义域设的 min TLS 1.2 无关**（TLS 不匹配不会给出 HTTP 状态码）
+      #   · 同 zone 的 www.clever-vpn.org 与 apex **也全被挑战**
+      #     ⇒ **zone 级** bot 策略（Bot Fight Mode / SBFM 一类），不是该 hostname 的规则
+      #   · www.cloudflare.com 200、GitHub 同一资产 200 ⇒ 网络本身没问题
+      # 结论：判定维度是**来源 IP/ASN 的信誉**（Azure 段被判为机器流量）。所以 CI 无法
+      #       代表安装机 ⇒ 这一层只能 warning，不能当发布门禁。
+      # 风险与处置：个别 VPS 段若也被判机器流量，会静默回退 GitHub（安装仍成功，但镜像
+      #       白搭）。彻底解决要在 Cloudflare 侧给 download.clever-vpn.org 放行
+      #       （WAF 自定义规则 Skip/Allow）；那条规则生效后本 job 才会变绿。
 
   install:
     name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
