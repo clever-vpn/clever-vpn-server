@@ -42,22 +42,51 @@ jobs:
     steps:
       # 矩阵只覆盖 amd64/arm64，这里补齐 arm/386 —— 少发一个架构的资产
       # 真机 RC 是发现不了的（RC 用手工 scp 的本地文件，不碰下载）。
+      # 所有发布资产都得在（九个：4 架构 × (gz + sha256) + 引导脚本）。
+      #
+      # 带重试：刚发布的资产有**传播窗口**（2026-09-28 实测：同一个 URL 先 404、
+      # 后 200；GitHub release 与 R2 都出现过）。所以这里等它出现，而不是把
+      # “还没传播到”报成“缺失”；重试完仍是 404 才是真缺失。
       - name: All published assets exist
         run: |
           set -euo pipefail
           base="$ASSET_BASE/$TAG"
+          attempts=10
+          interval=15
+
+          # probe <url> -> 0 = 200；1 = 重试后仍不是 200
+          probe() {
+            local i code
+            for i in $(seq 1 "$attempts"); do
+              code=$(curl -sSL -I -o /dev/null -m 30 -w '%{http_code}' "$1" || echo 000)
+              if [ "$code" = "200" ]; then
+                if [ "$i" -gt 1 ]; then echo "  became readable on attempt $i"; fi
+                return 0
+              fi
+              echo "  attempt $i: HTTP $code"
+              sleep "$interval"
+            done
+            return 1
+          }
+
           missing=0
           for arch in 386 amd64 arm arm64; do
             for ext in gz sha256; do
-              url="$base/clever-vpn-server-${arch}-${TAG}.${ext}"
-              code=$(curl -sSL -I -o /dev/null -w '%{http_code}' "$url")
-              echo "${arch}.${ext} -> ${code}"
-              if [ "$code" != "200" ]; then
-                echo "::error::missing release asset: clever-vpn-server-${arch}-${TAG}.${ext}"
+              f="clever-vpn-server-${arch}-${TAG}.${ext}"
+              if probe "$base/$f"; then
+                echo "OK   $f"
+              else
+                echo "::error::missing release asset: $f"
                 missing=1
               fi
             done
           done
+          if probe "$base/install.sh"; then
+            echo "OK   install.sh"
+          else
+            echo "::error::missing release asset: install.sh"
+            missing=1
+          fi
           [ "$missing" -eq 0 ]
 
       - name: Checksum file is well-formed
@@ -125,17 +154,36 @@ jobs:
           done
           files="$files install.sh"
 
+          # probe <url> -> 0 = 200；2 = 被挑战（403 + cf-mitigated）；1 = 缺对象
+          # 带重试：刚推上去的对象有传播窗口（实测到过 404→200），重试完仍 404
+          # 才是真缺。被挑战不重试 —— 它与传播无关。
+          probe() {
+            local i code
+            for i in $(seq 1 8); do
+              code=$(curl -sSL -o /dev/null -m 30 -D /tmp/h -w '%{http_code}' "$1" || echo 000)
+              if [ "$code" = "200" ]; then
+                return 0
+              fi
+              if [ "$code" = "403" ] && grep -qi '^cf-mitigated: challenge' /tmp/h; then
+                return 2
+              fi
+              if [ "$i" -lt 8 ]; then
+                echo "  attempt $i: HTTP $code (waiting for propagation)" >&2
+                sleep 15
+              fi
+            done
+            echo "  final HTTP $code" >&2
+            return 1
+          }
+
           for f in $files; do
-            code=$(curl -sSL -o /dev/null -m 30 -D /tmp/h -w '%{http_code}' "$r2_base/$f" || echo "000")
-            if [ "$code" = "200" ]; then
-              echo "200        $f"
-            elif [ "$code" = "403" ] && grep -qi '^cf-mitigated: challenge' /tmp/h; then
-              echo "challenge  $f"
-              blocked=1
-            else
-              echo "::error::R2 上没有 $f（HTTP $code）—— 镜像缺对象是真问题"
-              missing=1
-            fi
+            rc=0
+            probe "$r2_base/$f" || rc=$?
+            case "$rc" in
+              0) echo "200        $f" ;;
+              2) echo "challenge  $f"; blocked=1 ;;
+              *) echo "::error::R2 上没有 $f（重试后仍不可得）—— 镜像缺对象是真问题"; missing=1 ;;
+            esac
 
             # 内容一致性：.gz 有 10MB，改比同名 .sha256（它装的是**解压后**二进制的摘要）；
             # install.sh 是引导层，两份必须逐字节一致。
@@ -210,7 +258,15 @@ jobs:
         run: |
           set -euo pipefail
           boot="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG/install.sh"
-          code=$(curl -sSL -o /dev/null -m 60 -D /tmp/h -w '%{http_code}' "$boot" || echo "000")
+          # 传播窗口：刚推上去的对象可能先给 404（实测到过），重试几次再判
+          code="000"
+          for i in $(seq 1 5); do
+            code=$(curl -sSL -o /dev/null -m 60 -D /tmp/h -w '%{http_code}' "$boot" || echo "000")
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$code" = "403" ] && grep -qi '^cf-mitigated: challenge' /tmp/h; then break; fi
+            echo "  attempt $i: HTTP $code (waiting for propagation)"
+            sleep 15
+          done
           if [ "$code" != "200" ]; then
             if [ "$code" = "403" ] && grep -qi '^cf-mitigated: challenge' /tmp/h; then
               echo "::warning::CI 出口被公开域名的边缘策略挑战（403 challenge）—— 改用 GitHub release 上的同一份 install.sh"
