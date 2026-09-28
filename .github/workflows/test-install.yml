@@ -71,53 +71,69 @@ jobs:
           fi
           echo "OK: $(cat /tmp/checksum.sha256)"
 
-  # R2 镜像：主源必须真的可用、且与 GitHub 同物。
-  # 没有这一步，「主源切到 R2」在 CI 里是完全不可见的 —— install.sh 会静默回退到 GitHub，
-  # 测试照样绿，而 R2 可能根本没被回填。
+  # R2 镜像 —— 【提示，不作门禁】
+  #
+  # ⚠️ CI 的出口是 GitHub runner（云厂商 IP 段）。2026-09-28 实测同一个对象 URL：
+  #      家宽 200 / **真实 VPS 200** / runner **403** —— 被公开域名的边缘策略挡了。
+  #    所以这个 job 在 CI 里**无法**证明"安装机能取到"，把它当门禁等于永远红。
+  #
+  # 权威的"镜像 == GitHub"校验在私有仓的 push-to-r2.yml：它用凭证从 R2 取回对象
+  # 再逐字节比对（不碰公网边缘）。这里保留是为了：
+  #   · 一旦边缘策略允许 CI，它自动变成有效证据；
+  #   · 不允许时，它把真实状态与原因写清楚，而不是让人猜。
+  # 内容不一致（真问题）本步骤会以非零退出：不用 continue-on-error，由脚本自己决定。
   r2-mirror:
-    name: R2 mirror serves the same bytes
+    name: R2 mirror reachability (advisory)
     needs: contract
     runs-on: ubuntu-latest
     env:
       TAG: ${{ inputs.tag }}
     steps:
-      - name: R2 has the same assets as GitHub
+      - name: R2 public reachability and content match
         run: |
-          set -euo pipefail
+          set -uo pipefail
           gh_base="$ASSET_BASE/$TAG"
           r2_base="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG"
-          fail=0
+          blocked=0
+          mismatch=0
 
           for arch in 386 amd64 arm arm64; do
-            # .gz：只要可达（字节级比对在 push-to-r2.yml 上传时已做过，
-            #     这里不值得每次都拉 4×10MB）
             url="$r2_base/clever-vpn-server-${arch}-${TAG}.gz"
-            code=$(curl -sSL -I -o /dev/null -w '%{http_code}' "$url")
-            echo "r2 ${arch}.gz -> ${code}"
-            if [ "$code" != "200" ]; then
-              echo "::error::R2 is missing $url（主源未回填，install.sh 只能静默回退到 GitHub）"
-              fail=1
+            code=$(curl -sSL -I -o /dev/null -m 30 -w '%{http_code}' "$url" || true)
+            echo "r2 ${arch}.gz -> ${code:-<transport error>}"
+            if [ "${code:-}" != "200" ]; then
+              blocked=1
             fi
 
-            # .sha256：内容小，直接逐字节比对 —— 它装的是**解压后二进制**的摘要，
-            #          两边内容一致即证明两边发布的是同一个编译产物
+            # .sha256 内容小，直接逐字节比对 —— 它装的是**解压后二进制**的摘要，
+            # 两边内容一致即证明两边发布的是同一个编译产物
             f="clever-vpn-server-${arch}-${TAG}.sha256"
-            curl -fsSL "$gh_base/$f" -o "/tmp/gh-$f"
-            if ! curl -fsSL "$r2_base/$f" -o "/tmp/r2-$f"; then
-              echo "::error::R2 is missing $r2_base/$f（主源未回填）"
-              fail=1
+            if ! curl -fsSL "$gh_base/$f" -o "/tmp/gh-$f" 2>/dev/null; then
+              echo "::warning::GitHub 侧取不到 $f"
+              mismatch=1
+              continue
+            fi
+            if ! curl -fsSL "$r2_base/$f" -o "/tmp/r2-$f" 2>/dev/null; then
+              blocked=1
               continue
             fi
             if ! cmp -s "/tmp/gh-$f" "/tmp/r2-$f"; then
               echo "::error::R2 checksum file differs from GitHub: $f"
-              fail=1
+              mismatch=1
             fi
           done
 
-          if [ "$fail" -ne 0 ]; then
+          # 内容不一致 = 真问题（不管谁能取到），必须红
+          if [ "$mismatch" -ne 0 ]; then
             exit 1
           fi
-          echo "OK: R2 mirror matches GitHub for $TAG"
+
+          if [ "$blocked" -ne 0 ]; then
+            echo "::warning::CI runner 取不到公开域名（边缘策略拦截）。这不代表线上有问题："
+            echo "::warning::真实 VPS 实测 200。权威校验见私有仓 push-to-r2.yml 的桶内比对。"
+            exit 0
+          fi
+          echo "OK: R2 public edge serves the same assets as GitHub for $TAG"
 
   install:
     name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
