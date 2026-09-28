@@ -353,14 +353,16 @@ check_environment
 GZ="${APP}-${ARCH}-${TAG}.gz"
 SHA_FILE="${APP}-${ARCH}-${TAG}.sha256"
 
-# 候选下载源，按优先级排列（"标签|基址"）；实际 URL = <基址>/<TAG>/<asset>。
+# 候选下载源，按优先级排列（"标签|基址"）；实际 URL = <基址>/<asset>。
 # 两处的 URL 形状**同构**，所以换源只是换一个基址。
 #   ① R2 镜像在前：主源，正是为了摆脱 GitHub 那个 CDN 的抖动；
 #   ② GitHub 必须留在列表里 —— v2.0.1 起所有已部署的二进制都只认公开仓
 #      releases/download 的形状（不可变的对外契约）。
+# ⚠️ 基址里必须带上 $TAG —— 缺了这一段会去请求 /vpn-server/clever-vpn-server-amd64-vX.gz
+#    （少一层目录），两个源都会报「没有这份资产」，安装直接失败。
 SOURCES=(
-    "R2|${R2_BASE_URL}"
-    "GitHub|https://github.com/$OWNER/$REPO/releases/download"
+    "R2|${R2_BASE_URL}/$TAG"
+    "GitHub|https://github.com/$OWNER/$REPO/releases/download/$TAG"
 )
 
 # prepare_artifact：把待安装的二进制就位（产出可执行的 ./$APP）。返回 0 = 就绪。
