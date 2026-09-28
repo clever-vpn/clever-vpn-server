@@ -10,9 +10,10 @@ name: Test Install Script
 #
 # 触发：
 #   ① 手工 workflow_dispatch（tag 必填 —— 刻意不给默认值，避免又拿旧版本跑一遍）
-#   ② 私有仓 clever-vpn-server-src 的 release.yml 发完后自动拉起来
-#      （job dispatch-contract-test，gh workflow run ...；token 缺 workflow scope 时
-#      只告警，那时按它打印出来的命令手工跑）
+#   ② **发版自动跑**：发布是在**本仓**创建的（私有仓 release.yml 跨仓建 release），
+#      所以监听 release 事件就够了 —— 不需要任何跨仓 token。
+#      （曾用私有仓 `gh workflow run` 跨仓触发，实测 403：PAT 缺 workflow/actions:write
+#       权限 ⇒ 换成 release 事件，链路更短、也不依赖任何凭据。）
 
 on:
   workflow_dispatch:
@@ -21,11 +22,15 @@ on:
         description: 'Version tag to test (e.g. v2.1.11)'
         required: true
         type: string
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 env:
+  # 待测版本：release 事件取 release 的 tag，手工触发取输入
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
   # 发布资产基址（GitHub releases = 老机器的升级源，形状不允许变）
   ASSET_BASE: https://github.com/clever-vpn/clever-vpn-server/releases/download
   # 发布资产镜像（主源）；key 形状 = <R2_PREFIX>/<TAG>/<asset>
@@ -37,8 +42,6 @@ jobs:
   contract:
     name: Asset contract (all 4 arches)
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ inputs.tag }}
     steps:
       # 矩阵只覆盖 amd64/arm64，这里补齐 arm/386 —— 少发一个架构的资产
       # 真机 RC 是发现不了的（RC 用手工 scp 的本地文件，不碰下载）。
@@ -143,8 +146,6 @@ jobs:
     name: R2 mirror (advisory when the edge challenges CI)
     needs: contract
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ inputs.tag }}
     steps:
       - name: R2 objects exist and match GitHub
         run: |
@@ -254,7 +255,6 @@ jobs:
             arch: arm64
     env:
       CI: 'true'
-      TAG: ${{ inputs.tag }}
     steps:
       # 生产的真实调用形式：@ 是 $0 占位符，TAG/TOKEN 才落在 $1/$2 上。
       # 引导层就是 cf-api 生成的那一个：R2 上的 <TAG>/install.sh。
