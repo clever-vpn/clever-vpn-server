@@ -166,6 +166,17 @@ jobs:
             "$(curl -sSL -o /dev/null -m 30 -w '%{http_code}' "$ASSET_BASE/${TAG}/clever-vpn-server-amd64-${TAG}.gz" || echo err)"
 
           echo
+          echo "=== TLS 握手（验证「是不是 min TLS 1.2 导致」）==="
+          # 若真是 TLS 协商问题，curl 会以 exit 35 / SSL_ERROR 失败且**拿不到 HTTP 状态**；
+          # 而我们现在拿到的是完整 HTTP/2 403 + 挑战页 ⇒ 握手本身是通的。
+          # 这里再把协商到具体版本打出来，彻底排除。
+          for opt in "--tls-max 1.2" "--tlsv1.3" ""; do
+            info=$(curl -sS -v $opt -o /dev/null -m 30 "$url" 2>&1 | grep -iE 'SSL connection using' | head -1 || true)
+            code=$(curl -sS $opt -o /dev/null -m 30 -w '%{http_code}' "$url" 2>/dev/null || echo err)
+            printf '%-16s code=%-5s %s\n' "${opt:-(默认)}" "$code" "$info"
+          done
+
+          echo
           echo "=== 同 zone 其它 hostname 对照（判定是 zone 级还是 hostname 级）==="
           for h in "$R2_PUBLIC_BASE/" "$R2_PUBLIC_BASE/$R2_PREFIX/" \
                    "https://www.clever-vpn.org/" "https://clever-vpn.org/"; do
