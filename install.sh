@@ -23,6 +23,8 @@ cleanup() {
             rm -f "$f" "$f.tmp" 2>/dev/null || true
         fi
     done
+    # --local-file 的工作副本目录（正常执行到这里已经空了）
+    rmdir "${WORK_DIR:-}" 2>/dev/null || true
     return 0
 }
 trap cleanup EXIT
@@ -352,6 +354,10 @@ check_environment
 # ———————— 产物就位与校验 ————————
 GZ="${APP}-${ARCH}-${TAG}.gz"
 SHA_FILE="${APP}-${ARCH}-${TAG}.sha256"
+# --local-file 的工作副本目录。刻意用一个**子目录**：
+# 用户（和 CI）很可能就是把发布资产放在当前目录、再以相对路径传进来的，
+# 那时若把工作副本放在 CWD 就会与源同名，`cp` 直接报 "are the same file" 而失败。
+WORK_DIR=".clever-vpn-install-work"
 
 # 候选下载源，按优先级排列（"标签|基址"）；实际 URL = <基址>/<asset>。
 # 两处的 URL 形状**同构**，所以换源只是换一个基址。
@@ -378,6 +384,9 @@ prepare_artifact() {
             echo "         Continuing, but double-check its architecture and version." >&2
         fi
         echo "Using local artifact: $LOCAL_FILE"
+        mkdir -p "$WORK_DIR"
+        GZ="${WORK_DIR}/${GZ}"
+        SHA_FILE="${WORK_DIR}/${SHA_FILE}"
         cp -f -- "$LOCAL_FILE" "$GZ"
 
         sibling_sha="${LOCAL_FILE%.gz}.sha256"
