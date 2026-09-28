@@ -162,10 +162,18 @@ jobs:
             "$(curl -sS -o /dev/null -m 30 --http1.1 -w '%{http_code}' "$url" || echo err)"
           printf '%-28s %s\n' "https://www.cloudflare.com/" \
             "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' https://www.cloudflare.com/ || echo err)"
-          printf '%-28s %s\n' "GitHub 同一资产" \
-            "$(curl -sSL -o /dev/null -m 30 -w '%{http_code}' "$GH_ASSET_BASE/${TAG}/clever-vpn-server-amd64-${TAG}.gz" || echo err)"
-          printf '%-28s %s\n' "R2 public 域根路径" \
-            "$(curl -sS -o /dev/null -m 30 -w '%{http_code}' "$R2_PUBLIC_BASE/" || echo err)"
+          printf '%-34s %s\n' "GitHub 同一资产" \
+            "$(curl -sSL -o /dev/null -m 30 -w '%{http_code}' "$ASSET_BASE/${TAG}/clever-vpn-server-amd64-${TAG}.gz" || echo err)"
+
+          echo
+          echo "=== 同 zone 其它 hostname 对照（判定是 zone 级还是 hostname 级）==="
+          for h in "$R2_PUBLIC_BASE/" "$R2_PUBLIC_BASE/$R2_PREFIX/" \
+                   "https://www.clever-vpn.org/" "https://clever-vpn.org/"; do
+            out=$(curl -sS -o /dev/null -D - -m 30 -w ' code=%{http_code}' "$h" 2>/dev/null || true)
+            mit=$(printf '%s' "$out" | grep -i '^cf-mitigated:' | tr -d '\r' || true)
+            code=$(printf '%s' "$out" | grep -o 'code=[0-9]*' || true)
+            printf '%-34s %s %s\n' "$h" "$code" "${mit:-（无 cf-mitigated）}"
+          done
 
   install:
     name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
