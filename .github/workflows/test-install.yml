@@ -10,9 +10,9 @@ name: Test Install Script
 #
 # 触发：
 #   ① 手工 workflow_dispatch（tag 必填 —— 刻意不给默认值，避免又拿旧版本跑一遍）
-#   ② 由私有仓 clever-vpn-server-src 的 release workflow 在发布后经 API 触发
-#      （POST /repos/clever-vpn/clever-vpn-server/actions/workflows/test-install.yml/dispatches，
-#      需要 PAT 具备 workflow scope）
+#   ② 私有仓 clever-vpn-server-src 的 release.yml 发完后自动拉起来
+#      （job dispatch-contract-test，gh workflow run ...；token 缺 workflow scope 时
+#      只告警，那时按它打印出来的命令手工跑）
 
 on:
   workflow_dispatch:
@@ -26,11 +26,10 @@ permissions:
   contents: read
 
 env:
-  # 生产环境的脚本入口（与 cf-api 生成的安装命令一致）
-  INSTALL_URL: https://github.com/clever-vpn/clever-vpn-server/raw/main/install.sh
-  # 发布资产基址（= 老机器的升级源，形状不允许变）
+  # 发布资产基址（GitHub releases = 老机器的升级源，形状不允许变）
   ASSET_BASE: https://github.com/clever-vpn/clever-vpn-server/releases/download
   # 发布资产镜像（主源）；key 形状 = <R2_PREFIX>/<TAG>/<asset>
+  # 生产的引导层就是它：<R2_PUBLIC_BASE>/<R2_PREFIX>/<TAG>/install.sh（与 cf-api 一致）
   R2_PUBLIC_BASE: https://download.clever-vpn.org
   R2_PREFIX: vpn-server
 
@@ -71,67 +70,94 @@ jobs:
           fi
           echo "OK: $(cat /tmp/checksum.sha256)"
 
-  # R2 镜像 —— 【提示，不作门禁】
+      # 引导脚本（install.sh）现在也是发布资产，而它是安装命令的**第一步**
+      # —— 它缺了就整条命令失败。所以它是契约：不多不少，得能跑、得是真脚本。
+      - name: install.sh is published and is the real one
+        run: |
+          set -euo pipefail
+          curl -fsSL "$ASSET_BASE/$TAG/install.sh" -o /tmp/install.sh
+          bash -n /tmp/install.sh
+          bytes=$(wc -c < /tmp/install.sh | tr -d '[:space:]')
+          echo "install.sh: ${bytes} bytes"
+          # 挡住空文件 / 错误页：真脚本 ~21KB
+          [ "$bytes" -ge 8000 ] || { echo "::error::install.sh 太小（${bytes} bytes）—— 不像真脚本"; exit 1; }
+          # 契约标记（定义在真脚本头部）：区分真脚本与公开仓那层兼容壳 / 历史副本
+          grep -q 'CLEVER_VPN_REAL_INSTALLER=1' /tmp/install.sh \
+            || { echo "::error::发布出去的 install.sh 没有契约标记（是兼容壳或历史副本？）"; exit 1; }
+          # R2 主源必须写在脚本里，否则镜像等于白做
+          grep -q 'download.clever-vpn.org' /tmp/install.sh \
+            || { echo "::error::install.sh 里没有 R2 主源"; exit 1; }
+
+  # R2 镜像 —— 缺对象是**硬门禁**，取不到（被挑战）是提示
   #
-  # ⚠️ CI 的出口是 GitHub runner（云厂商 IP 段）。2026-09-28 实测同一个对象 URL：
-  #      家宽 200 / **真实 VPS 200** / runner **403** —— 被公开域名的边缘策略挡了。
-  #    所以这个 job 在 CI 里**无法**证明"安装机能取到"，把它当门禁等于永远红。
+  # CI 的出口是 GitHub runner（云厂 IP 段）。2026-09-28 实测同一个对象 URL：
+  #    家宽 200 / **真实 VPS 200** / runner **403** —— 被公开域名的边缘策略挡了。
+  # 所以“CI 能不能取到”代表不了安装机，把它当门禁等于永远红。
   #
-  # 权威的"镜像 == GitHub"校验在私有仓的 push-to-r2.yml：它用凭证从 R2 取回对象
-  # 再逐字节比对（不碰公网边缘）。这里保留是为了：
-  #   · 一旦边缘策略允许 CI，它自动变成有效证据；
-  #   · 不允许时，它把真实状态与原因写清楚，而不是让人猜。
-  # 内容不一致（真问题）本步骤会以非零退出：不用 continue-on-error，由脚本自己决定。
+  # 但**缺对象**与**取不到**是两件事，状态码分得开（2026-09-28 实测，别再重新查）：
+  #    缺对象 ⇒ 404；被挑战 ⇒ 403 + `cf-mitigated: challenge`
+  # 于是这一层可以当门禁：404/其它一律红（镜像 job 没跑成、漏传了对象），
+  # 只有“403 + 挑战标记”才降级成 warning。内容比对同理（真不一致就红）。
+  #
+  # 权威的“镜像 == GitHub”校验在私有仓 release.yml 的 mirror-r2 / backfill-r2.yml
+  # （上传前逐项校验）；这里是不过凭证、从公网侧做的独立复核。
   r2-mirror:
-    name: R2 mirror reachability (advisory)
+    name: R2 mirror (advisory when the edge challenges CI)
     needs: contract
     runs-on: ubuntu-latest
     env:
       TAG: ${{ inputs.tag }}
     steps:
-      - name: R2 public reachability and content match
+      - name: R2 objects exist and match GitHub
         run: |
           set -uo pipefail
           gh_base="$ASSET_BASE/$TAG"
           r2_base="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG"
           blocked=0
+          missing=0
           mismatch=0
 
+          # 对象清单：4 架构 × (gz + sha256) + 引导脚本 install.sh
+          files=""
           for arch in 386 amd64 arm arm64; do
-            url="$r2_base/clever-vpn-server-${arch}-${TAG}.gz"
-            code=$(curl -sSL -I -o /dev/null -m 30 -w '%{http_code}' "$url" || true)
-            echo "r2 ${arch}.gz -> ${code:-<transport error>}"
-            if [ "${code:-}" != "200" ]; then
+            files="$files clever-vpn-server-${arch}-${TAG}.gz"
+            files="$files clever-vpn-server-${arch}-${TAG}.sha256"
+          done
+          files="$files install.sh"
+
+          for f in $files; do
+            code=$(curl -sSL -o /dev/null -m 30 -D /tmp/h -w '%{http_code}' "$r2_base/$f" || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "200        $f"
+            elif [ "$code" = "403" ] && grep -qi '^cf-mitigated: challenge' /tmp/h; then
+              echo "challenge  $f"
               blocked=1
+            else
+              echo "::error::R2 上没有 $f（HTTP $code）—— 镜像缺对象是真问题"
+              missing=1
             fi
 
-            # .sha256 内容小，直接逐字节比对 —— 它装的是**解压后二进制**的摘要，
-            # 两边内容一致即证明两边发布的是同一个编译产物
-            f="clever-vpn-server-${arch}-${TAG}.sha256"
-            if ! curl -fsSL "$gh_base/$f" -o "/tmp/gh-$f" 2>/dev/null; then
-              echo "::warning::GitHub 侧取不到 $f"
-              mismatch=1
-              continue
-            fi
-            if ! curl -fsSL "$r2_base/$f" -o "/tmp/r2-$f" 2>/dev/null; then
-              blocked=1
-              continue
-            fi
-            if ! cmp -s "/tmp/gh-$f" "/tmp/r2-$f"; then
-              echo "::error::R2 checksum file differs from GitHub: $f"
-              mismatch=1
+            # 内容一致性：.gz 有 10MB，改比同名 .sha256（它装的是**解压后**二进制的摘要）；
+            # install.sh 是引导层，两份必须逐字节一致。
+            case "$f" in
+              *.gz) continue ;;
+            esac
+            if curl -fsSL "$gh_base/$f" -o /tmp/gh.bin 2>/dev/null && curl -fsSL "$r2_base/$f" -o /tmp/r2.bin 2>/dev/null; then
+              if ! cmp -s /tmp/gh.bin /tmp/r2.bin; then
+                echo "::error::R2 与 GitHub 内容不一致：$f"
+                mismatch=1
+              fi
+            else
+              echo "::warning::跳过比对 $f（有一侧取不到）"
             fi
           done
 
-          # 内容不一致 = 真问题（不管谁能取到），必须红
-          if [ "$mismatch" -ne 0 ]; then
-            exit 1
-          fi
-
+          [ "$missing" -eq 0 ] || exit 1
+          [ "$mismatch" -eq 0 ] || exit 1
           if [ "$blocked" -ne 0 ]; then
-            echo "::warning::CI runner 取不到公开域名（边缘策略拦截）。这不代表线上有问题："
-            echo "::warning::真实 VPS 实测 200。镜像的写入由私有仓 release.yml 的 mirror-r2 job /"
-            echo "::warning::backfill-r2.yml 负责（wrangler 上传失败会非零退出）。"
+            echo "::warning::CI runner 被公开域名的边缘策略挑战（403 challenge），取不到公开域名。"
+            echo "::warning::这**不代表线上有问题**：真实 VPS / 家宽实测都是 200。"
+            echo "::warning::要让它变绿，需在 Cloudflare 侧给 download.clever-vpn.org 放行（见下）。"
             exit 0
           fi
           echo "OK: R2 public edge serves the same assets as GitHub for $TAG"
@@ -148,10 +174,14 @@ jobs:
       #     ⇒ **zone 级** bot 策略（Bot Fight Mode / SBFM 一类），不是该 hostname 的规则
       #   · www.cloudflare.com 200、GitHub 同一资产 200 ⇒ 网络本身没问题
       # 结论：判定维度是**来源 IP/ASN 的信誉**（Azure 段被判为机器流量）。所以 CI 无法
-      #       代表安装机 ⇒ 这一层只能 warning，不能当发布门禁。
-      # 风险与处置：个别 VPS 段若也被判机器流量，会静默回退 GitHub（安装仍成功，但镜像
-      #       白搭）。彻底解决要在 Cloudflare 侧给 download.clever-vpn.org 放行
-      #       （WAF 自定义规则 Skip/Allow）；那条规则生效后本 job 才会变绿。
+      #       代表安装机 ⇒ 单看“取不到”只能 warning。
+      # 判别口径（2026-09-28 实测）：缺对象给 **404**、被挑战给 **403 + `cf-mitigated: 
+      #       challenge`**。两者本来就不一样，所以上一层的门禁并不因此失效。
+      # 风险与处置：二进制有兜底（脚本会回退 GitHub，安装仍成功，只是镜像白搭），
+      #       但**引导层没有兜底** —— 被判机器流量的安装机会连脚本都取不到，整条命令失败。
+      #       所以给 download.clever-vpn.org 放行（WAF 自定义规则 Skip/Allow，并让该
+      #       hostname 不过托管挑战）不只是“镜像好看”：它直接关系到那类机器能否装。
+      #       规则生效后本 job 变绿，也就成了验证手段。
 
   install:
     name: Install (${{ matrix.arch }}) on ${{ matrix.runner }}
@@ -169,16 +199,33 @@ jobs:
       CI: 'true'
       TAG: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-
       # 生产的真实调用形式：@ 是 $0 占位符，TAG/TOKEN 才落在 $1/$2 上。
-      # 这条路径此前从未被任何测试走过。
+      # 引导层就是 cf-api 生成的那一个：R2 上的 <TAG>/install.sh。
+      #
+      # CI runner 的出口会被公开域名的边缘策略挑战（见 r2-mirror 的说明）——
+      # 那不是线上故障，所以这里**只在“被挑战”时**降级到 GitHub release 上的同一份
+      # install.sh，并把原因打出来；404 之类的真问题照样红。
+      # 逐字节一致性由 r2-mirror 保证：降级跑的确是与 R2 完全相同的那份脚本。
       - name: Deployed entry point (production invocation form)
         run: |
-          set -eux
-          bash -c "$(curl -fsSL "$INSTALL_URL")" @ "$TAG" "test-token-not-used"
+          set -euo pipefail
+          boot="$R2_PUBLIC_BASE/$R2_PREFIX/$TAG/install.sh"
+          code=$(curl -sSL -o /dev/null -m 60 -D /tmp/h -w '%{http_code}' "$boot" || echo "000")
+          if [ "$code" != "200" ]; then
+            if [ "$code" = "403" ] && grep -qi '^cf-mitigated: challenge' /tmp/h; then
+              echo "::warning::CI 出口被公开域名的边缘策略挑战（403 challenge）—— 改用 GitHub release 上的同一份 install.sh"
+              echo "::warning::真实 VPS / 家宽实测都是 200；详见本文件 r2-mirror 的说明。"
+            else
+              echo "::error::生产引导层取不到：$boot（HTTP $code）"
+              exit 1
+            fi
+            boot="$ASSET_BASE/$TAG/install.sh"
+          fi
+          echo "bootstrap: $boot"
+          bash -c "$(curl -fsSL "$boot")" @ "$TAG" "test-token-not-used"
 
-      # 本地旁路：不起下载，直接装本地 .gz（手工 RC 验证用的就是这条路径）
+      # 本地旁路：不起下载，直接装本地 .gz（手工 RC 验证用的就是这条路径）。
+      # 用的是**发布出去的** install.sh，不是仓库里那份兼容壳。
       - name: Local artifact (--local-file)
         run: |
           set -eux
@@ -188,4 +235,5 @@ jobs:
           sha="clever-vpn-server-${{ matrix.arch }}-${TAG}.sha256"
           curl -fsSL "$ASSET_BASE/$TAG/$gz"  -o "$gz"
           curl -fsSL "$ASSET_BASE/$TAG/$sha" -o "$sha"
-          bash "$GITHUB_WORKSPACE/install.sh" "$TAG" --local-file "./$gz"
+          curl -fsSL "$ASSET_BASE/$TAG/install.sh" -o ./install.sh
+          bash ./install.sh "$TAG" --local-file "./$gz"
