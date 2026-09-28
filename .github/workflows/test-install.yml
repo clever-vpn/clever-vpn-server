@@ -289,6 +289,34 @@ jobs:
           echo "bootstrap: $boot"
           bash -c "$(curl -fsSL "$boot")" @ "$TAG" "test-token-not-used"
 
+      # 下载源可由环境变量从外部指定（CLEVER_VPN_SOURCES）—— 这里用它把几条路径
+      # 变成**确定性**的，而不是"碰巧 CI 取不到 R2 才走到兜底"：
+      #   ① 只走 GitHub ⇒ 必须成功（同一个脚本、同一个 TAG）
+      #   ② 源名非法 ⇒ 必须立刻拒绝（白名单生效）
+      #   ③ 引导层取不到 ⇒ 命令必须非零退出 —— cf-api 生成的命令正是这个形状
+      #      （`$(curl … || echo 'exit 1')`）；没有守卫时 `$( )` 会把失败吞掉，
+      #      变成"静默空执行、退出码 0"，用户以为装完了。
+      - name: Download-source override and the fail-loud guard
+        run: |
+          set -euo pipefail
+          script="$(curl -fsSL "$ASSET_BASE/$TAG/install.sh")"
+
+          # ① 只 GitHub
+          CLEVER_VPN_SOURCES=github bash -c "$script" @ "$TAG" "test-token-not-used"
+
+          # ② 非法源名：脚本自己就该拒绝
+          if CLEVER_VPN_SOURCES=bogus bash -c "$script" @ "$TAG" "" 2>/dev/null; then
+            echo "::error::非法的 CLEVER_VPN_SOURCES 本应报错退出，却返回 0"
+            exit 1
+          fi
+
+          # ③ 引导层取不到（用一个不存在的版本）
+          if bash -c "$(curl -fsSL "$ASSET_BASE/v0.0.0-rc.1/install.sh" || echo 'exit 1')" @ "v0.0.0-rc.1" ""; then
+            echo "::error::引导层取不到时本应非零退出，却返回 0"
+            exit 1
+          fi
+          echo "OK: 源可指定 / 非法值被拒 / 引导层失败会非零退出"
+
       # 本地旁路：不起下载，直接装本地 .gz（手工 RC 验证用的就是这条路径）。
       # 用的是**发布出去的** install.sh（新流程那份），不是公开仓里的旧流程入口。
       - name: Local artifact (--local-file)
